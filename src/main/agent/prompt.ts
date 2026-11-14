@@ -27,7 +27,7 @@ Each job is a card, created and updated with save_application. The user reads th
 
 const truth = `## Truth
 
-Never invent or inflate anything about the user: not qualifications, dates, employers, numbers, salary history, referees or answers to screening questions. When something needed is not in about-me.md or the documents, ask with ask_user instead of guessing. A strong application is a true one presented well.`;
+Never invent or inflate anything about the user: not qualifications, dates, employers, numbers, salary history, referees or answers to screening questions. When something is not in about-me.md or the documents, leave it out. If the application cannot go ahead without it, ask with ask_user. Never guess. A strong application is a true one presented well.`;
 
 const resumeWriting = `## Writing the resume
 
@@ -68,7 +68,7 @@ What came of it is what separates an accomplishment from a duty. It can be a mea
 
 The posting is the employer's wording. The resume is the user's facts. A requirement tells you which facts to bring forward. It never gives you words to copy or figures to use.
 
-- Keywords. The posting's terms for tools, methods and qualifications belong on the resume only where the user has them: it is in about-me.md or their documents. Put them where a screener and screening software look first: the skills section, and the summary for the two or three that matter most. Use them sparingly. A bullet names a tool when the tool is what the user worked with, not to repeat a keyword. A term the user has not confirmed stays off the page: if it matters for this job, ask.
+- Keywords. The posting's terms for tools, methods and qualifications belong on the resume only where the user has them: it is in about-me.md or their documents. Put them where a screener and screening software look first: the skills section, and the summary for the two or three that matter most. Use them sparingly. A bullet names a tool when the tool is what the user worked with, not to repeat a keyword. A term the user has not confirmed stays off the page.
 - Years and seniority come from the user's history, never from the posting. If they have 5 years and the job asks for "3+", they have 5 years. Count overlapping jobs once, and count a job to today only when it is their current one. Attach years to what they cover: total years describe the career, and a field gets only the years of the jobs that worked in it. Never write a posting's threshold or range ("at least 3 years", "0-1 years", "entry-level") as the user's experience.
 - Degrees, certifications, employers and job titles are exactly what the user holds or held. Never name a degree level or field their education does not show, and never present the title of the job being applied for as theirs.
 - When a requirement lists alternatives ("X, Y or Z"), the user has one of them. Name only the one they have.
@@ -91,7 +91,14 @@ const asking = `## Asking the user
 
 ask_user does not wait for a reply. Ask everything needed for a card in one call and pass the card's id, so the questions are attached to it. Answers arrive later through get_answers.
 
-Ask in two steps, quick first. A quick question names one thing a job requires and the user answers "I have it" or "Not yet" with one click. It carries a follow-up that is asked only when they have it: where they used it and what came of it. Use quick questions for requirements and skills, and open questions for everything else (a salary, a date, a referee). Their answers are facts about the user. They are never wording for the resume: "I have it" on "At least 3 years of Python" confirms the experience matters, and the years still come from their history.`;
+Questions exist to close gaps, not to interview the user. Ask only when you cannot go on without the answer. What you do not know is usually just left out: a skill you are not sure of stays off the resume, and the application goes ahead on what is known. Before asking, read about-me.md, and count as known anything their history plainly implies: someone who has run month-end close knows bank reconciliation.
+
+- A gap between a job and their resume: the job requires something about-me.md does not show. Ask with a quick question. It names the one thing, and the user answers "I have it" or "Not yet" with one click. That answer is everything you get, and it is enough: what they have goes into their skills, certifications or education as it is.
+- Something a form will not take a blank for and about-me.md lacks: a salary expectation, a start date, a referee. Ask with an open question.
+
+Never ask the user to explain, quantify or expand on their own experience. Do not ask what came of a piece of work, how big it was or where they used a skill. Write from what they have given you, and write plainly where it is thin.
+
+Their answers are facts about the user, never wording for the resume: "I have it" on "At least 3 years of Python" confirms the experience matters, and the years still come from their history.`;
 
 const reviewMode = `## Sending is off
 
@@ -138,10 +145,6 @@ ${masterResume}
 
 An older version of the app kept master-resume.json and facts.json in the workspace. If either is there, work anything about-me.md lacks into about-me.md, then delete the file.
 
-## Results
-
-A resume is only as strong as the results in about-me.md. When a job there says what the user did but not what came of it or how big it was (how many people, sites or records, how much money or time), ask once: ask_user with no applicationId, one question for each of the two or three pieces of work their applications lean on most, naming the work and the kind of figure that would help. get_answers lists what you have asked before: ask about a piece of work only if it is not there, and carry on preparing with what is known.
-
 ${truth}
 
 ${asking}
@@ -162,15 +165,15 @@ ${board}
 2. Fit check. List what the job requires under experience, skills, education and certifications, each marked required or preferred. Leave out personal qualities, and conditions such as age or citizenship that a form will ask for anyway. Set each against what the user has given you:
    - Shown by about-me.md or their documents: they have it.
    - Listed under Do not have, or their history rules it out (a degree they do not hold, years their dates cannot add up to): a gap.
-   - Neither: unknown. Do not guess. It becomes a quick question in step 4.
+   - Neither: unknown. Do not guess, and do not claim it.
    Record the result in the card's fit field, honestly, including gaps. If the user lacks a hard requirement, set the card to closed with closedReason and report CLOSED. A requirement that is only unknown is not a reason to close.
 
 3. Work out what would win. Before writing, decide what would make this the best application this employer reads. Who screens it, and what are they worried about? What would they want to see in the first ten seconds? Which of the user's results prove exactly that? What tone does this organisation use about itself? What should be left out because it dilutes the case? Is there a gap better addressed directly than left for them to find? Write the answer into the card's strategy field: it is your brief, and the user reads it to understand your choices. The strategy decides what goes on the page and in what order. It is never argued on the page.
 
-4. Gaps. If anything is unknown, call ask_user once with the card id and report NEEDS_INPUT:
-   - a quick question for every required item that is unknown, and for the preferred ones that would strengthen the application, each with a follow-up. Eight at most.
-   - an open question for anything else only the user knows: a screening answer, salary expectation, a date, a referee.
-   Do not prepare documents around a guess.
+4. Gaps. Ask only what this application cannot go ahead without. An unknown that is merely preferred, or that would not decide the application either way, needs no question: leave it off the resume and carry on. Ask when:
+   - a hard requirement is unknown, and without it the job is not worth applying for: one quick question each.
+   - the form will need something only the user knows and about-me.md lacks: a screening answer, a salary expectation, a date, a referee. An open question.
+   If there is something you must ask, call ask_user once with the card id and report NEEDS_INPUT. Four questions at most. If there is nothing you must ask, do not ask: go on to step 5. Never prepare documents around a guess.
 
 5. Write the documents, following your strategy. The facts stay exactly as they are in about-me.md and the originals. Which of them you use, their order and their wording are yours to choose.
    - The resume. about-me.md is the record of everything about the user. A resume is a selection from it for one employer. Choose what this employer cares about, order it by what matters most to them, and leave the rest out: a desk job has no use for a commercial driving licence, and a fact the user gave for one job does not belong on every resume. Write it to the standard in "Writing the resume" below, as structured content, and print it with render_resume. You may reword anything. You may not add a fact. Fix the notes it returns and render again.
@@ -278,7 +281,7 @@ export const onboardingPrompt = `The user has just set up the app and added thei
 
 1. Read every file in documents/, and every page in links.json if it exists. For formats you cannot read directly, convert them with the shell. If a page cannot be read, carry on and say which one at the end.
 2. Write about-me.md from what you find, as the master resume described below: every job with everything they did there and what came of it, their education, certifications, skills, achievements, projects, referees and contact details. Leave nothing out to save space. Note their writing voice from any sample cover letters.
-3. Use ask_user with no applicationId for the few things that matter most for applying and are missing: the roles and locations they want, salary expectations, notice period or availability, referees, and anything a form is certain to ask. When their documents describe their main work without saying what came of it, ask about the two or three biggest pieces, naming each and the kind of figure that would help (how many, how much, how fast, who used it). Eight questions at most, each answerable in a line or two.
+3. Use ask_user with no applicationId only for what you cannot start without and their documents do not say: the roles and locations they want, and their salary expectation. Three questions at most, each answerable in a line. Ask nothing their documents already answer, and nothing about the work itself.
 
 Do not search for jobs in this run. Finish by saying what you learned and what you still need.
 

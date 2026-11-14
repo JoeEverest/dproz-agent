@@ -23,7 +23,6 @@ export type NewQuestion = {
 	why?: string;
 	item?: string;
 	category?: RequirementKind;
-	followUp?: string;
 };
 
 export type ApplicationPatch = Partial<Omit<Application, "id" | "questions" | "timeline" | "createdAt" | "updatedAt">>;
@@ -180,10 +179,7 @@ const itemKey = (item: string) =>
 
 export const sameItem = (a?: string, b?: string) => Boolean(a && b) && itemKey(a ?? "") === itemKey(b ?? "");
 
-/**
- * A question after the user replies. A click on "I have it" leaves a question that has a follow-up
- * open, so the detail can be given next; every other reply settles it.
- */
+/** A question after the user replies: a click on a quick question, or the text of an answer to an open one. */
 export function applyReply(question: Question, reply: QuestionReply): Question {
 	const settled = (fields: Partial<Question>) => ({
 		...question,
@@ -191,22 +187,15 @@ export function applyReply(question: Question, reply: QuestionReply): Question {
 		answeredAt: now(),
 		deliveredAt: undefined,
 	});
-	if (typeof reply !== "string") {
-		if (!reply.have) return settled({ have: false, answer: haveAnswer(false) });
-		return question.followUp ? { ...question, have: true } : settled({ have: true, answer: haveAnswer(true) });
-	}
-	const text = reply.trim();
-	if (question.item && question.have) return settled({ answer: haveAnswer(true, text) });
-	return settled({ answer: text });
+	if (typeof reply !== "string") return settled({ have: reply.have, answer: haveAnswer(reply.have) });
+	return settled({ answer: reply.trim() });
 }
 
 /**
  * Gives a quick question's answer to the same question wherever else it is waiting, so the user
  * answers a requirement once however many jobs ask for it.
  */
-async function shareAnswer(asked: Question) {
-	// "I have it" counts from the moment it is clicked, whether or not the follow-up gets an answer.
-	const question = !asked.answer && asked.item && asked.have ? { ...asked, answer: haveAnswer(true) } : asked;
+async function shareAnswer(question: Question) {
 	const { item, have, answer } = question;
 	if (!answer || !item) return;
 

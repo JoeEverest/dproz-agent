@@ -1,4 +1,4 @@
-import { awaitingChoice, HAVE_IT, haveDetail, type QuestionReply } from "@shared/application";
+import { awaitingChoice, type QuestionReply } from "@shared/application";
 import { Textarea } from "@ui-sdk/react/textarea";
 import { ArrowUp, Bot, Briefcase, CheckCheck, ChevronLeft, ChevronRight, CornerDownRight } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -27,22 +27,12 @@ const ASKING = {
 	none: "Do you have this?",
 };
 
-/** What a question asks right now: the requirement, its follow-up once they have it, or the question itself. */
-const followingUp = (question: OpenQuestion) => Boolean(question.item && question.have && question.followUp);
-const promptOf = (question: OpenQuestion) =>
-	followingUp(question) ? (question.followUp ?? question.question) : (question.item ?? question.question);
+const promptOf = (question: OpenQuestion) => question.item ?? question.question;
 
-type AgentMessageProps = {
-	question: OpenQuestion;
-	/** Show the follow-up to a quick question in place of the question itself. */
-	followUp?: boolean;
-	replying: boolean;
-	canPick: boolean;
-	onPick: () => void;
-};
+type AgentMessageProps = { question: OpenQuestion; replying: boolean; canPick: boolean; onPick: () => void };
 
-function AgentMessage({ question, followUp, replying, canPick, onPick }: AgentMessageProps) {
-	const quick = Boolean(question.item) && !followUp;
+function AgentMessage({ question, replying, canPick, onPick }: AgentMessageProps) {
+	const quick = Boolean(question.item);
 	return (
 		<li className="flex items-start gap-2.5">
 			<Avatar />
@@ -61,12 +51,10 @@ function AgentMessage({ question, followUp, replying, canPick, onPick }: AgentMe
 						</p>
 					)}
 					{quick && <p className="mb-0.5 text-xs text-ink-3">{ASKING[question.category ?? "none"]}</p>}
-					<p className={`selectable text-pretty ${quick ? "font-medium" : ""}`}>
-						{followUp ? question.followUp : (question.item ?? question.question)}
-					</p>
-					{!followUp && question.why && <p className="selectable mt-1 text-xs text-ink-2">{question.why}</p>}
+					<p className={`selectable text-pretty ${quick ? "font-medium" : ""}`}>{promptOf(question)}</p>
+					{question.why && <p className="selectable mt-1 text-xs text-ink-2">{question.why}</p>}
 				</div>
-				{!question.answer && canPick && (followUp || !followingUp(question)) && (
+				{!question.answer && canPick && (
 					<p className="mt-1 pl-1 text-xs">
 						{replying ? (
 							<span className="font-medium text-accent-ink">Answering this one below</span>
@@ -82,46 +70,22 @@ function AgentMessage({ question, followUp, replying, canPick, onPick }: AgentMe
 	);
 }
 
-function UserMessage({ question, text }: { question: OpenQuestion; text: string }) {
+function UserMessage({ question }: { question: OpenQuestion }) {
+	// A one-click answer reads as the button that was pressed.
+	const text =
+		question.item && question.have !== undefined ? (question.have ? "I have it" : "Not yet") : question.answer;
 	return (
 		<li className="flex flex-col items-end">
 			<p className="selectable max-w-[78%] rounded-2xl rounded-tr-md bg-solid px-3.5 py-2.5 whitespace-pre-wrap text-on-solid">
 				{text}
 			</p>
-			{question.answer && (
-				<p className="mt-1 flex items-center gap-1 pr-1 text-xs text-ink-3">
-					{question.deliveredAt && <CheckCheck size={12} strokeWidth={2} className="text-accent" aria-hidden />}
-					{question.deliveredAt ? "Saved to what the agent knows" : "Sent"}
-					{question.answeredAt && <span className="tabular-nums"> · {relativeTime(question.answeredAt)}</span>}
-				</p>
-			)}
+			<p className="mt-1 flex items-center gap-1 pr-1 text-xs text-ink-3">
+				{question.deliveredAt && <CheckCheck size={12} strokeWidth={2} className="text-accent" aria-hidden />}
+				{question.deliveredAt ? "Saved to what the agent knows" : "Sent"}
+				{question.answeredAt && <span className="tabular-nums"> · {relativeTime(question.answeredAt)}</span>}
+			</p>
 		</li>
 	);
-}
-
-/**
- * One question as the messages it has produced so far. A quick question reads as a short exchange:
- * the requirement, the one-click answer, then the follow-up and its answer.
- */
-function exchange(question: OpenQuestion, props: Omit<AgentMessageProps, "question" | "followUp">) {
-	const ask = <AgentMessage key={`q-${question.id}`} question={question} {...props} />;
-	const reply = (key: string, text: string) => (
-		<UserMessage key={`${key}-${question.id}`} question={question} text={text} />
-	);
-	if (!question.item || question.have === undefined) {
-		return question.answer ? [ask, reply("a", question.answer)] : [ask];
-	}
-	if (!question.have) return [ask, reply("a", "Not yet")];
-	const detail =
-		haveDetail(question.answer ?? "") || (question.answer?.startsWith(HAVE_IT) ? "" : (question.answer ?? ""));
-	const messages = [ask];
-	if (!question.followUp) return [...messages, reply("a", "I have it")];
-	messages.push(
-		<UserMessage key={`c-${question.id}`} question={{ ...question, answer: undefined }} text="I have it" />,
-		<AgentMessage key={`f-${question.id}`} question={question} followUp {...props} />,
-	);
-	if (question.answer) messages.push(reply("a", detail || "Skipped"));
-	return messages;
 }
 
 function Working({ label }: { label: string }) {
@@ -151,11 +115,9 @@ function Composer({ open, target, onPick, onAnswer }: ComposerProps) {
 	const [draft, setDraft] = useState("");
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	// A quick question is answered with a click, unless the user would rather say it in their own words.
-	const [ownWords, setOwnWords] = useState<string | null>(null);
 	const position = target ? open.indexOf(target) : 0;
-	const choosing = Boolean(target && awaitingChoice(target) && ownWords !== target.id);
-	const canSkip = Boolean(target && followingUp(target));
+	// A quick question is answered with a click, and only with a click.
+	const choosing = Boolean(target && awaitingChoice(target));
 
 	const send = async (reply: QuestionReply) => {
 		if (!target) return;
@@ -207,17 +169,8 @@ function Composer({ open, target, onPick, onAnswer }: ComposerProps) {
 				{target && choosing ? (
 					<div className="px-3.5 pt-3 pb-3">
 						<HaveChoice question={target} disabled={saving} onChoose={(have) => void send({ have })} />
-						<p className="mt-2.5 flex items-center justify-between gap-3 text-xs">
-							<span className={error ? "text-danger" : "text-ink-3"} role={error ? "alert" : undefined}>
-								{error ?? "One click answers it. Your answer is saved, so it is asked once."}
-							</span>
-							<button
-								type="button"
-								className="shrink-0 font-medium text-ink-3 hover:text-ink"
-								onClick={() => setOwnWords(target.id)}
-							>
-								Answer in my own words
-							</button>
+						<p className={`mt-2.5 text-xs ${error ? "text-danger" : "text-ink-3"}`} role={error ? "alert" : undefined}>
+							{error ?? "One click answers it. Your answer is saved, so it is asked once."}
 						</p>
 					</div>
 				) : (
@@ -240,16 +193,6 @@ function Composer({ open, target, onPick, onAnswer }: ComposerProps) {
 								{error ?? (target ? `${sendKey} to send` : "The agent will ask here when it needs you")}
 							</span>
 							<span className="flex shrink-0 items-center gap-2">
-								{canSkip && (
-									<button
-										type="button"
-										disabled={saving}
-										className="px-1.5 text-xs font-medium text-ink-3 hover:text-ink"
-										onClick={() => void send("")}
-									>
-										Skip
-									</button>
-								)}
 								<button
 									type="submit"
 									aria-label="Send answer"
@@ -282,7 +225,7 @@ export function QuestionsPage({ history, open: waiting, onAnswer }: Props) {
 	const target = open.find((question) => question.id === targetId) ?? open[0];
 	const answer = async (question: OpenQuestion, reply: QuestionReply) => {
 		await onAnswer(question, reply);
-		// After a click, move on to the next quick question rather than this one's follow-up.
+		// After a click, move on to the next quick question.
 		if (typeof reply !== "string") setTargetId(null);
 	};
 	const usingAnswers = agent.status === "running" && agent.runLabel === "Using your answers";
@@ -316,13 +259,18 @@ export function QuestionsPage({ history, open: waiting, onAnswer }: Props) {
 						<li className="pb-1 text-center text-xs text-ink-3">
 							The agent asks here when it needs something only you know. Each answer is saved, so it is asked once.
 						</li>
-						{history.flatMap((question) =>
-							exchange(question, {
-								replying: question.id === target?.id,
-								canPick: open.length > 1,
-								onPick: () => setTargetId(question.id),
-							}),
-						)}
+						{history.flatMap((question) => {
+							const ask = (
+								<AgentMessage
+									key={`q-${question.id}`}
+									question={question}
+									replying={question.id === target?.id}
+									canPick={open.length > 1}
+									onPick={() => setTargetId(question.id)}
+								/>
+							);
+							return question.answer ? [ask, <UserMessage key={`a-${question.id}`} question={question} />] : [ask];
+						})}
 						{usingAnswers && <Working label="Carrying on with your answers" />}
 					</ol>
 				)}

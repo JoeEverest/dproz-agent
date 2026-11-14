@@ -11,10 +11,14 @@ export function QuestionForm({ question, onAnswer }: Props) {
 	const [error, setError] = useState<string | null>(null);
 
 	if (question.answer) {
+		// A one-click answer reads as the button that was pressed.
+		const quick = Boolean(question.item) && question.have !== undefined;
 		return (
 			<div className="rounded-lg border border-line px-3 py-2.5">
 				<p className="selectable text-ink-2">{question.item ?? question.question}</p>
-				<p className="selectable mt-1 font-medium whitespace-pre-wrap">{question.answer}</p>
+				<p className="selectable mt-1 font-medium whitespace-pre-wrap">
+					{quick ? (question.have ? "I have it" : "Not yet") : question.answer}
+				</p>
 			</div>
 		);
 	}
@@ -24,7 +28,6 @@ export function QuestionForm({ question, onAnswer }: Props) {
 		setError(null);
 		try {
 			await onAnswer(reply);
-			setDraft("");
 		} catch (cause) {
 			setError(`That did not save: ${(cause as Error).message}`);
 		} finally {
@@ -41,9 +44,6 @@ export function QuestionForm({ question, onAnswer }: Props) {
 		);
 	}
 
-	// A quick question the user has, now asking for the detail. It can be skipped.
-	const followingUp = Boolean(question.item && question.have);
-	const prompt = followingUp ? (question.followUp ?? question.question) : question.question;
 	const submit = (event: FormEvent) => {
 		event.preventDefault();
 		if (draft.trim()) void send(draft.trim());
@@ -51,8 +51,7 @@ export function QuestionForm({ question, onAnswer }: Props) {
 
 	return (
 		<form onSubmit={submit} className="rounded-lg bg-attention-wash px-3 py-2.5">
-			{followingUp && <p className="selectable mb-1 text-xs text-ink-2">You have: {question.item}</p>}
-			<p className="selectable font-medium">{prompt}</p>
+			<p className="selectable font-medium">{question.question}</p>
 			{question.why && <p className="selectable mt-0.5 text-xs text-ink-2">{question.why}</p>}
 			<Textarea
 				className="mt-2 max-h-40"
@@ -62,15 +61,10 @@ export function QuestionForm({ question, onAnswer }: Props) {
 				onValueChange={(value) => setDraft(value)}
 				submitShortcut="mod+enter"
 				placeholder="Your answer"
-				aria-label={prompt}
+				aria-label={question.question}
 			/>
 			{error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
-			<div className="mt-2 flex justify-end gap-2">
-				{followingUp && (
-					<Button type="button" size="sm" disabled={saving} onClick={() => void send("")}>
-						Skip
-					</Button>
-				)}
+			<div className="mt-2 flex justify-end">
 				<Button type="submit" size="sm" tone="primary" disabled={!draft.trim() || saving}>
 					{saving ? "Saving" : "Answer"}
 				</Button>

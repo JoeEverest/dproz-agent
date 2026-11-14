@@ -147,7 +147,7 @@ try {
 	await nav("Questions (1)").waitFor({ timeout: 10_000 });
 	check("a question from the agent shows as a count on Questions", true);
 	await nav("Questions (1)").click();
-	const answerBox = window.locator("#agent-panel textarea[placeholder='Your answer']");
+	const answerBox = window.locator("#agent-panel textarea:not([disabled])");
 	await answerBox.waitFor({ timeout: 10_000 });
 	check("the question is asked on the Questions screen, not on the board", true);
 	await answerBox.fill("Yes, class B");
@@ -156,22 +156,15 @@ try {
 	const answered = JSON.parse(await fs.readFile(path.join(folder, "application.json"), "utf8"));
 	check("an answer given in the panel is saved to the card", answered.questions[0].answer === "Yes, class B");
 
-	// Quick questions: a requirement, answered with one click, then the follow-up for what they have.
-	const quick = (id, item, category, followUp) => ({
-		id,
-		question: `Do you have this: ${item}?`,
-		item,
-		category,
-		followUp,
-		askedAt: now,
-	});
+	// Quick questions: a requirement, answered with one click and nothing more.
+	const quick = (id, item, category) => ({ id, question: `Do you have this: ${item}?`, item, category, askedAt: now });
 	await fs.writeFile(
 		path.join(folder, "application.json"),
 		JSON.stringify({
 			...answered,
 			questions: [
 				...answered.questions,
-				quick("q2", "Power BI", "skills", "Where did you use Power BI, and what did the reports change?"),
+				quick("q2", "Power BI", "skills"),
 				quick("q3", "CPA(T) or an equivalent qualification", "certifications"),
 			],
 		}),
@@ -205,22 +198,23 @@ try {
 	await choice.getByText("CPA(T) or an equivalent qualification").waitFor({ timeout: 10_000 });
 	check("one click answers it and moves to the next quick question", true);
 	await choice.getByRole("button", { name: /^Not yet/ }).click();
-	await answerBox.waitFor({ timeout: 10_000 });
-	check(
-		"what the user has is followed up with a deeper question",
-		(await answerBox.getAttribute("aria-label")) === "Where did you use Power BI, and what did the reports change?",
-	);
-	await shot(window, `platform-${process.platform}-follow-up`);
-	await answerBox.fill("At Acme, for the monthly sales reports. Reporting went from 3 days to 1.");
-	await answerBox.press("ControlOrMeta+Enter");
-	await window.waitForTimeout(1200);
+	await window
+		.getByText("Nothing to answer right now")
+		.or(window.locator("#agent-panel textarea[disabled]"))
+		.first()
+		.waitFor({ timeout: 10_000 });
+	await window.waitForTimeout(600);
 	const triaged = JSON.parse(await fs.readFile(path.join(folder, "application.json"), "utf8")).questions;
 	const elsewhere = JSON.parse(await fs.readFile(path.join(second, "application.json"), "utf8")).questions[0];
 	check(
-		"the answers are saved to the card",
-		triaged[1].have === true && triaged[1].answer.startsWith("I have it. At Acme") && triaged[2].have === false,
+		"a click is the whole answer: nothing asks the user to type more",
+		triaged[1].answer === "I have it." &&
+			triaged[2].answer === "I do not have it." &&
+			(await answerBox.count()) === 0 &&
+			(await window.getByRole("button", { name: /detail/i }).count()) === 0,
 		`${triaged[1].answer} / ${triaged[2].answer}`,
 	);
+	await shot(window, `platform-${process.platform}-quick-answered`);
 	check(
 		"the same requirement on another job is answered without asking again",
 		elsewhere.have === true && elsewhere.answer === "I have it.",

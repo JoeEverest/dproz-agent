@@ -80,25 +80,20 @@ describe("application store", () => {
 		warn.mockRestore();
 	});
 
-	it("answers a quick question with one click, and follows up only what the user has", async () => {
+	it("answers a quick question with one click, and that is the whole answer", async () => {
 		const { application } = await store.createApplication(job);
 		const asked = await store.askApplicationQuestions(application.id, [
-			{ item: "Power BI", category: "skills", followUp: "Where did you use Power BI?" },
-			{ item: "CPA(T) or equivalent", category: "certifications", followUp: "When did you qualify?" },
+			{ item: "Power BI", category: "skills" },
+			{ item: "CPA(T) or equivalent", category: "certifications" },
 			{ question: "What salary do you expect?" },
 		]);
 		const [powerBi, cpa, salary] = asked.questions;
 		expect(powerBi.question).toBe("Do you have this: Power BI?");
 
-		// "I have it" leaves the question open for the follow-up.
 		let card = await store.answerApplicationQuestion(application.id, powerBi.id, { have: true });
-		expect(card.questions[0].have).toBe(true);
-		expect(card.questions[0].answer).toBeUndefined();
+		expect(card.questions[0]).toMatchObject({ have: true, answer: "I have it." });
+		expect(await store.hasUndeliveredAnswers()).toBe(true);
 
-		card = await store.answerApplicationQuestion(application.id, powerBi.id, "At Meru Dairies, for sales reports.");
-		expect(card.questions[0].answer).toBe("I have it. At Meru Dairies, for sales reports.");
-
-		// "Not yet" settles at once, with no follow-up.
 		card = await store.answerApplicationQuestion(application.id, cpa.id, { have: false });
 		expect(card.questions[1]).toMatchObject({ have: false, answer: "I do not have it." });
 

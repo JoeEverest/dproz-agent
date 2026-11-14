@@ -68,7 +68,7 @@ const answers = [
 		/role|position|looking for|target|kind of (job|work)/i,
 		"Finance Officer, Accountant or Senior Accountant roles in manufacturing or FMCG.",
 	],
-	// Results of the work on the CV, for when the agent asks what came of it.
+	// Results of the work on the CV. The agent should not ask for these, and the full run fails if it does.
 	[
 		/engagement|fieldwork|finding|audit client/i,
 		"Six engagements over two years, for manufacturers and NGOs with revenue up to TZS 18 billion. On one, my stock count found TZS 42 million of obsolete inventory that was then written off.",

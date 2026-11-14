@@ -38,11 +38,10 @@ export const questionSchema = z.object({
 	id: z.string(),
 	question: z.string(),
 	why: z.string().optional(),
-	// A quick question asks whether the user has one thing a job requires. They answer with one click,
-	// and only when they have it are they asked the follow-up.
+	// A quick question asks whether the user has one thing a job requires, and is answered with one
+	// click. That is all it asks: anything that needs words is an ordinary question.
 	item: z.string().optional(),
 	category: z.enum(REQUIREMENT_KINDS).optional(),
-	followUp: z.string().optional(),
 	have: z.boolean().optional(),
 	answer: z.string().optional(),
 	askedAt: z.string(),
@@ -109,16 +108,12 @@ export type Application = z.infer<typeof applicationSchema>;
 
 export const unansweredQuestions = (questions: Question[]) => questions.filter((question) => !question.answer);
 
-/** A click on "I have it" or "Not yet", or an answer in the user's own words. */
+/** A click on "I have it" or "Not yet" for a quick question, or the text of an answer to an open one. */
 export type QuestionReply = string | { have: boolean };
 
 /** A quick question that still needs its one-click answer. */
 export const awaitingChoice = (question: Question) =>
 	Boolean(question.item) && question.have === undefined && !question.answer;
 
-/** What a requirement's answer reads as, from the one-click choice and any detail given with it. */
-export const HAVE_IT = "I have it.";
-export const LACK_IT = "I do not have it.";
-export const haveAnswer = (have: boolean, detail = "") =>
-	have ? [HAVE_IT, detail.trim()].filter(Boolean).join(" ") : LACK_IT;
-export const haveDetail = (answer: string) => (answer.startsWith(HAVE_IT) ? answer.slice(HAVE_IT.length).trim() : "");
+/** What a one-click answer is recorded as. */
+export const haveAnswer = (have: boolean) => (have ? "I have it." : "I do not have it.");

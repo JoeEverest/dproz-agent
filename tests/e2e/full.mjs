@@ -50,7 +50,7 @@ async function attend() {
 	const nav = (name) => window.getByRole("navigation").getByRole("button", { name });
 	const waiting = await nav(/^Questions \(\d+\)$/).count();
 	if (waiting) await nav(/^Questions/).click();
-	const box = window.locator("#agent-panel textarea[placeholder='Your answer']");
+	const box = window.locator("#agent-panel textarea:not([disabled])");
 	// A quick question is a requirement with two buttons; anything else is typed.
 	const choice = window.locator("#agent-panel form fieldset");
 	while ((await box.count()) || (await choice.count())) {
@@ -225,12 +225,17 @@ try {
 			applied.documents.map((document) => document.file).join(", "),
 		);
 	}
-	// about-me.md is the master resume: every job with its results, and the answers worked in as facts.
+	// about-me.md is the master resume: every job from the CV, and the answers worked in as facts. The agent
+	// no longer asks what came of the work, so the record holds only the figures the CV gave.
 	const record = await readWorkspace("about-me.md");
 	log(`master resume:\n${record}`);
+	check("the master resume has every job on the CV", /Meru Dairies/.test(record) && /Tembo/.test(record));
 	check(
-		"the master resume has every job and the results the user gave",
-		/Meru Dairies/.test(record) && /Tembo/.test(record) && /220/.test(record) && /42 million/.test(record),
+		"it holds nothing the user was never asked for and never gave",
+		!/42 million|obsolete inventory|four department heads|six engagements/i.test(record),
+		record
+			.split("\n")
+			.find((line) => /42 million|obsolete inventory|four department heads|six engagements/i.test(line)) ?? "",
 	);
 	check(
 		"an answer to a quick question came back as a fact, not as a question",
@@ -242,6 +247,29 @@ try {
 		"the master resume holds facts about the user, and none of the agent's notes",
 		notes.length === 0,
 		notes.join(" | "),
+	);
+	const everyQuestion = [
+		...JSON.parse((await readWorkspace("inbox.json")) || "[]"),
+		...(await applications()).flatMap((application) => application.questions),
+	];
+	const quick = everyQuestion.filter((question) => question.item);
+	const open = everyQuestion.filter((question) => !question.item);
+	for (const question of quick) log(`  quick: ${question.item}`);
+	for (const question of open) log(`  typed: ${question.question}`);
+	const digging = open.filter((question) =>
+		/what came of it|what was the result|how (many|much|large|big)|can you (quantify|describe|tell me more)|what did you (achieve|build)/i.test(
+			question.question,
+		),
+	);
+	check(
+		"no question asks the user to explain or quantify their own experience",
+		digging.length === 0,
+		digging.map((question) => question.question).join(" | "),
+	);
+	check(
+		"the agent asks only what it must",
+		everyQuestion.length <= 8 && open.length <= 4,
+		`${everyQuestion.length} questions in the whole run, ${open.length} of them typed`,
 	);
 	// Whether a quick question is needed depends on what the agent already learned, so it is not required.
 	log(`quick questions answered: ${quickAnswers}`);

@@ -145,13 +145,13 @@ export const deskServer = () =>
 			),
 			tool(
 				"ask_user",
-				`Ask the user for something only they know. Does not wait: the question is queued, the card moves to Needs your input, and you carry on with other work. Answers arrive through get_answers. Ask every question you have for a card in one call.
+				`Ask the user for something only they know, when you cannot go on without it. Does not wait: the question is queued, the card moves to Needs your input, and you carry on with other work. Answers arrive through get_answers. Ask everything you must for a card in one call, and nothing you could do without.
 
 Two kinds of question:
-- A quick question asks whether they have one thing a job requires that nothing they have given you settles. Set item. They answer "I have it" or "Not yet" with one click, so ask these freely: it is how you learn what may go on their resume. Add followUp to learn, only when they have it, where they used it and what came of it.
-- An open question is anything else. Set question, and they answer in a line or two.
+- A quick question closes a gap between a job and the user's resume: it asks whether they have one thing the job requires that about-me.md does not show. Set item. They answer "I have it" or "Not yet" with one click, and that is the whole answer. It cannot ask for more: there is no follow-up.
+- An open question is for what needs words and a form will not take a blank for: a salary expectation, a start date, a referee. Set question.
 
-Read about-me.md first and never ask what it already answers. When the answers come back, work them into about-me.md.`,
+Never ask the user to explain, quantify or expand on what is already in about-me.md. Read it first and never ask what it already answers. When the answers come back, work them into about-me.md.`,
 				{
 					applicationId: z
 						.string()
@@ -168,15 +168,9 @@ Read about-me.md first and never ask what it already answers. When the answers c
 									.string()
 									.optional()
 									.describe(
-										"Makes this a quick question. One requirement as a short label that reads naturally after 'Do you have this:', about 12 words at most: 'At least 3 years of Python', 'Bachelor's degree in Accounting, Finance or a related field', 'Power BI', 'A valid driving licence'. Keep alternatives together in one item, state years as a minimum, and ask about the requirement as the job means it, in plain words rather than the posting's sentence. Not a personal quality (teamwork, honesty) and not something a form will ask anyway.",
+										"Makes this a quick question. One requirement the job states as a short label that reads naturally after 'Do you have this:', about 12 words at most: 'At least 3 years of Python', 'Bachelor's degree in Accounting, Finance or a related field', 'Power BI', 'A valid driving licence'. Keep alternatives together in one item, state years as a minimum, and ask about the requirement as the job means it, in plain words rather than the posting's sentence. Not a personal quality (teamwork, honesty) and not something a form will ask anyway.",
 									),
 								category: z.enum(REQUIREMENT_KINDS).optional().describe("What kind of requirement the item is."),
-								followUp: z
-									.string()
-									.optional()
-									.describe(
-										"For a quick question, asked only if they have it: where they used it and what came of it, worded for this item. 'Where did you use Power BI, and what did the reports change?'",
-									),
 								why: z.string().optional().describe("What the answer unblocks."),
 							}),
 						)
