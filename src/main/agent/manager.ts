@@ -19,6 +19,7 @@ import {
 	addJobPrompt,
 	answersPrompt,
 	documentsPrompt,
+	linksPrompt,
 	onboardingPrompt,
 	subagents,
 	submitPrompt,
@@ -107,6 +108,10 @@ class AgentManager {
 
 	documentsAdded(names: string[]) {
 		if (names.length) this.enqueue({ label: "Reading your documents", prompt: documentsPrompt(names) });
+	}
+
+	linksAdded(urls: string[]) {
+		if (urls.length) this.enqueue({ label: "Reading your links", prompt: linksPrompt(urls) });
 	}
 
 	addJob(source: string, prepareOnly: boolean) {

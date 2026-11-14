@@ -1,12 +1,79 @@
-import type { WorkspaceDocument } from "@shared/ipc";
-import { FilePlus2, FileText, X } from "lucide-react";
-import { type DragEvent, useState } from "react";
+import type { LinkAdded, WorkspaceDocument } from "@shared/ipc";
+import { linkParts, normaliseLink } from "@shared/links";
+import { FilePlus2, FileText, Link2, X } from "lucide-react";
+import { type DragEvent, type FormEvent, useState } from "react";
 import { fileSize } from "../lib/format";
 import { useResource } from "../lib/hooks";
-import { Button, IconButton } from "./ui";
+import { Button, IconButton, Input } from "./ui";
+
+/** A link dragged in from a browser, when the drop carries one. */
+export function droppedLink(event: DragEvent): string | null {
+	const first = event.dataTransfer
+		.getData("text/uri-list")
+		.split("\n")
+		.map((line) => line.trim())
+		.find((line) => line && !line.startsWith("#"));
+	return first ? normaliseLink(first) : null;
+}
+
+/** Paste a link to a page or a file. A file is downloaded as a document; a page is kept as a link. */
+export function LinkField({ onAdded }: { onAdded: (result: LinkAdded) => void }) {
+	const [value, setValue] = useState("");
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const submit = async (event: FormEvent) => {
+		event.preventDefault();
+		if (!normaliseLink(value)) {
+			setError("That does not look like a web link.");
+			return;
+		}
+		setBusy(true);
+		setError(null);
+		try {
+			onAdded(await window.desk.documents.addLink(value));
+			setValue("");
+		} catch {
+			setError("The link was not added. Try again.");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<form onSubmit={(event) => void submit(event)}>
+			<div className="flex gap-2">
+				<Input
+					aria-label="Link to a page or file about you"
+					value={value}
+					onValueChange={(next) => {
+						setValue(next);
+						setError(null);
+					}}
+					placeholder="Or paste a link: a portfolio, a profile, a resume kept online"
+					autoComplete="off"
+					spellCheck={false}
+				/>
+				<Button
+					type="submit"
+					disabled={busy || !value.trim()}
+					icon={<Link2 size={14} strokeWidth={1.75} aria-hidden />}
+				>
+					{busy ? "Adding" : "Add link"}
+				</Button>
+			</div>
+			{error && (
+				<p role="alert" className="mt-1 text-xs text-danger">
+					{error}
+				</p>
+			)}
+		</form>
+	);
+}
 
 export function DocumentsPanel({ onAdded }: { onAdded?: (names: string[]) => void }) {
 	const documents = useResource(() => window.desk.documents.list());
+	const links = useResource(() => window.desk.documents.links());
 	const [over, setOver] = useState(false);
 	const list = documents.data ?? [];
 
@@ -20,8 +87,15 @@ export function DocumentsPanel({ onAdded }: { onAdded?: (names: string[]) => voi
 	const onDrop = async (event: DragEvent) => {
 		event.preventDefault();
 		setOver(false);
+		const link = droppedLink(event);
 		const paths = [...event.dataTransfer.files].map((file) => window.desk.documents.pathForFile(file)).filter(Boolean);
 		if (paths.length) accept(await window.desk.documents.add(paths));
+		else if (link) acceptLink(await window.desk.documents.addLink(link));
+	};
+
+	const acceptLink = (result: LinkAdded) => {
+		accept(result.documents);
+		links.setData(result.links);
 	};
 
 	return (
@@ -48,7 +122,10 @@ export function DocumentsPanel({ onAdded }: { onAdded?: (names: string[]) => voi
 					Choose files
 				</Button>
 			</div>
-			{list.length > 0 && (
+			<div className="mt-2">
+				<LinkField onAdded={acceptLink} />
+			</div>
+			{list.length + (links.data?.length ?? 0) > 0 && (
 				<ul className="mt-2 flex flex-col">
 					{list.map((document) => (
 						<li key={document.name} className="group flex items-center gap-2.5 rounded-md py-1 pr-1 pl-2 hover:bg-fill">
@@ -59,6 +136,22 @@ export function DocumentsPanel({ onAdded }: { onAdded?: (names: string[]) => voi
 								label={`Remove ${document.name}`}
 								className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
 								onClick={async () => documents.setData(await window.desk.documents.remove(document.name))}
+							>
+								<X size={14} strokeWidth={1.75} aria-hidden />
+							</IconButton>
+						</li>
+					))}
+					{(links.data ?? []).map((link) => (
+						<li key={link.url} className="group flex items-center gap-2.5 rounded-md py-1 pr-1 pl-2 hover:bg-fill">
+							<Link2 size={15} className="shrink-0 text-ink-3" strokeWidth={1.75} aria-hidden />
+							<span className="selectable min-w-0 flex-1 truncate text-sm">
+								{linkParts(link.url).site}
+								<span className="text-ink-3">{linkParts(link.url).page}</span>
+							</span>
+							<IconButton
+								label={`Remove the link to ${linkParts(link.url).site}`}
+								className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+								onClick={async () => links.setData(await window.desk.documents.removeLink(link.url))}
 							>
 								<X size={14} strokeWidth={1.75} aria-hidden />
 							</IconButton>

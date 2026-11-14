@@ -58,7 +58,7 @@ export async function listDocuments(): Promise<WorkspaceDocument[]> {
 	return described.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-async function freeName(directory: string, name: string) {
+export async function freeName(directory: string, name: string) {
 	const { name: stem, ext } = path.parse(name);
 	let candidate = name;
 	for (let copy = 2; await exists(path.join(directory, candidate)); copy++) candidate = `${stem} ${copy}${ext}`;

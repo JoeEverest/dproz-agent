@@ -34,6 +34,7 @@ function Step({ state, title, children }: { state: StepState; title: string; chi
 export function Onboarding({ onDone }: { onDone: () => Promise<void> }) {
 	const setup = useResource(() => window.desk.setup.status());
 	const documents = useResource(() => window.desk.documents.list());
+	const links = useResource(() => window.desk.documents.links());
 	const [installing, setInstalling] = useState(false);
 	const [progress, setProgress] = useState("");
 	const [installError, setInstallError] = useState<string | null>(null);
@@ -42,7 +43,10 @@ export function Onboarding({ onDone }: { onDone: () => Promise<void> }) {
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: poll the document list while this screen is open
 	useEffect(() => {
-		const timer = setInterval(() => void documents.refresh(), 1500);
+		const timer = setInterval(() => {
+			void documents.refresh();
+			void links.refresh();
+		}, 1500);
 		return () => clearInterval(timer);
 	}, []);
 
@@ -69,7 +73,7 @@ export function Onboarding({ onDone }: { onDone: () => Promise<void> }) {
 		await onDone();
 	};
 
-	const hasDocuments = (documents.data?.length ?? 0) > 0;
+	const hasDocuments = (documents.data?.length ?? 0) + (links.data?.length ?? 0) > 0;
 	const ready = Boolean(claude?.signedIn && status?.browserInstalled);
 
 	return (

@@ -1,9 +1,11 @@
-import type { Settings, SetupStatus, UpdateInfo, WorkspaceDocument } from "@shared/ipc";
+import type { LinkAdded, Settings, SetupStatus, UpdateInfo, WorkspaceDocument } from "@shared/ipc";
+import { linkParts } from "@shared/links";
 import { PasswordInput, PasswordInputControl, PasswordInputToggle } from "@ui-sdk/react/password-input";
-import { Eye, EyeOff, FileText, KeyRound, Pencil, Plus, ShieldAlert, Trash2, Upload } from "lucide-react";
+import { Eye, EyeOff, FileText, KeyRound, Link2, Pencil, Plus, ShieldAlert, Trash2, Upload } from "lucide-react";
 import { type DragEvent, type FormEvent, type ReactNode, useState } from "react";
 import { fileSize, relativeTime } from "../lib/format";
 import { useResource } from "../lib/hooks";
+import { droppedLink, LinkField } from "./Documents";
 import { Markdown } from "./Markdown";
 import { PageHeader } from "./PageHeader";
 import { ModelChoice, ProviderForm } from "./ProviderForm";
@@ -49,8 +51,10 @@ function IconTile({ children }: { children: ReactNode }) {
 
 function DocumentsGroup() {
 	const documents = useResource(() => window.desk.documents.list());
+	const links = useResource(() => window.desk.documents.links());
 	const [over, setOver] = useState(false);
 	const list = documents.data ?? [];
+	const linkList = links.data ?? [];
 
 	const accept = (next: WorkspaceDocument[]) => {
 		const known = new Set(list.map((document) => document.name));
@@ -62,8 +66,17 @@ function DocumentsGroup() {
 	const onDrop = async (event: DragEvent) => {
 		event.preventDefault();
 		setOver(false);
+		const link = droppedLink(event);
 		const paths = [...event.dataTransfer.files].map((file) => window.desk.documents.pathForFile(file)).filter(Boolean);
 		if (paths.length) accept(await window.desk.documents.add(paths));
+		else if (link) acceptLink(await window.desk.documents.addLink(link));
+	};
+
+	// A link to a file arrives as a document, which accept() hands to the agent; a page is handed over as a link.
+	const acceptLink = (result: LinkAdded) => {
+		accept(result.documents);
+		links.setData(result.links);
+		if (result.added?.kind === "link") void window.desk.agent.linksAdded([result.added.url]);
 	};
 
 	const choose = async () => accept(await window.desk.documents.pick());
@@ -71,7 +84,7 @@ function DocumentsGroup() {
 	return (
 		<Group
 			title="Your documents"
-			note="Everything the agent holds on you. It reads these to learn about you and tailors a copy for each job. Remove one and it stops using it."
+			note="Everything the agent holds on you: files, and links to pages about you. It reads these to learn about you and tailors a copy for each job. Remove one and it stops using it."
 			action={
 				<Button size="sm" icon={<Plus size={13} strokeWidth={2} aria-hidden />} onClick={() => void choose()}>
 					Add documents
@@ -102,6 +115,34 @@ function DocumentsGroup() {
 					))}
 				</ul>
 			)}
+			{linkList.length > 0 && (
+				<ul>
+					{linkList.map((link) => {
+						const { site, page } = linkParts(link.url);
+						return (
+							<li key={link.url} className="flex items-center gap-3 border-b border-line py-2.5 pr-2.5 pl-4">
+								<IconTile>
+									<Link2 size={15} strokeWidth={1.75} aria-hidden />
+								</IconTile>
+								<div className="min-w-0 flex-1">
+									<p className="selectable truncate font-medium">
+										{site}
+										<span className="font-normal text-ink-3">{page}</span>
+									</p>
+									<p className="text-xs text-ink-3">Link · added {relativeTime(link.addedAt)}</p>
+								</div>
+								<IconButton
+									label={`Remove the link to ${site}`}
+									className="hover:bg-danger-wash hover:text-danger"
+									onClick={async () => links.setData(await window.desk.documents.removeLink(link.url))}
+								>
+									<Trash2 size={14} strokeWidth={1.75} aria-hidden />
+								</IconButton>
+							</li>
+						);
+					})}
+				</ul>
+			)}
 			{/* biome-ignore lint/a11y/noStaticElementInteractions: drop target; the Add documents button covers keyboard and pointer use */}
 			<div
 				onDragOver={(event) => {
@@ -116,9 +157,12 @@ function DocumentsGroup() {
 			>
 				<Upload size={14} strokeWidth={1.75} aria-hidden />
 				<p>
-					{list.length === 0 ? "No documents yet. " : ""}Drop a resume, certificate, reference, transcript or old cover
-					letter here.
+					{list.length + linkList.length === 0 ? "No documents yet. " : ""}Drop a resume, certificate, reference,
+					transcript or old cover letter here.
 				</p>
+			</div>
+			<div className="mx-2 mb-2">
+				<LinkField onAdded={acceptLink} />
 			</div>
 		</Group>
 	);

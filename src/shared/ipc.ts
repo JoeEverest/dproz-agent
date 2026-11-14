@@ -44,6 +44,16 @@ export type WorkspaceDocument = {
 	modifiedAt: string;
 };
 
+/** A web page the user gave as a source about themselves. The agent reads it; nothing is downloaded. */
+export type SourceLink = { url: string; addedAt: string };
+
+/** What adding a link did: a link to a file becomes a document, a link to a page is kept as a link. */
+export type LinkAdded = {
+	documents: WorkspaceDocument[];
+	links: SourceLink[];
+	added?: { kind: "document"; name: string } | { kind: "link"; url: string };
+};
+
 export type CredentialSummary = {
 	site: string;
 	username: string;
@@ -134,6 +144,9 @@ export type DeskApi = {
 		add(paths: string[]): Promise<WorkspaceDocument[]>;
 		pick(): Promise<WorkspaceDocument[]>;
 		remove(name: string): Promise<WorkspaceDocument[]>;
+		links(): Promise<SourceLink[]>;
+		addLink(link: string): Promise<LinkAdded>;
+		removeLink(url: string): Promise<SourceLink[]>;
 		pathForFile(file: File): string;
 	};
 	profile: {
@@ -166,6 +179,7 @@ export type DeskApi = {
 		activity(): Promise<ActivityItem[]>;
 		onboard(): Promise<void>;
 		documentsAdded(names: string[]): Promise<void>;
+		linksAdded(urls: string[]): Promise<void>;
 		setPaused(paused: boolean): Promise<void>;
 		stop(): Promise<void>;
 	};
@@ -199,7 +213,7 @@ type RemoteAreas = Exclude<keyof DeskApi, "on">;
 export const DESK_METHODS = {
 	settings: ["get", "update"],
 	setup: ["status", "installBrowser", "chooseWorkspace"],
-	documents: ["list", "add", "pick", "remove"],
+	documents: ["list", "add", "pick", "remove", "links", "addLink", "removeLink"],
 	profile: ["read", "write"],
 	applications: [
 		"list",
@@ -214,7 +228,7 @@ export const DESK_METHODS = {
 	],
 	inbox: ["list", "answer"],
 	credentials: ["list", "save", "remove"],
-	agent: ["state", "activity", "onboard", "documentsAdded", "setPaused", "stop"],
+	agent: ["state", "activity", "onboard", "documentsAdded", "linksAdded", "setPaused", "stop"],
 	help: ["current", "respond"],
 	claude: ["setApiKey", "setEndpoint", "endpointModels", "setEndpointModel", "clearConnection"],
 	updates: ["status", "check", "download", "install"],

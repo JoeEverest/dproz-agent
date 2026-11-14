@@ -35,6 +35,18 @@ const updates = http.createServer((request, response) => {
 		);
 		return;
 	}
+	// ...and for the web, when a link is added as a source: one address is a file, one is a page.
+	if (request.url.startsWith("/files/cv")) {
+		response.setHeader("content-type", "application/pdf");
+		response.setHeader("content-disposition", 'attachment; filename="Rehema Kisanga CV.pdf"');
+		response.end("%PDF-1.4 test");
+		return;
+	}
+	if (request.url.startsWith("/portfolio")) {
+		response.setHeader("content-type", "text/html; charset=utf-8");
+		response.end("<!doctype html><title>Portfolio</title><h1>Rehema Kisanga</h1>");
+		return;
+	}
 	// Not an Ollama server, so the app never goes on to ask ollama.com for cloud models.
 	if (request.url.startsWith("/api/version")) {
 		response.statusCode = 404;
@@ -221,6 +233,40 @@ try {
 		"the keyring warning shows exactly when storage is not encrypted",
 		(await window.getByText("no system keyring").count()) > 0 === !storage.encrypted,
 	);
+
+	const origin = new URL(updateUrl).origin;
+	const linkField = window.getByRole("textbox", { name: "Link to a page or file about you" });
+	const addLink = window.getByRole("button", { name: "Add link" });
+	const savedLinks = async () =>
+		JSON.parse(await fs.readFile(path.join(sandbox.workspace, "links.json"), "utf8").catch(() => "[]"));
+	await linkField.fill("my resume");
+	await addLink.click();
+	check(
+		"something that is not a link is refused",
+		(await window.getByText("That does not look like a web link.").count()) === 1 && (await savedLinks()).length === 0,
+	);
+	await linkField.fill(`${origin}/portfolio#work`);
+	await addLink.click();
+	await window.getByRole("button", { name: /Remove the link to 127\.0\.0\.1/ }).waitFor({ timeout: 30_000 });
+	check(
+		"a link to a page is kept as a link for the agent to read",
+		(await savedLinks()).map((link) => link.url).join() === `${origin}/portfolio`,
+		JSON.stringify(await savedLinks()),
+	);
+	await linkField.fill(`${origin}/files/cv`);
+	await addLink.click();
+	await window.getByText("Rehema Kisanga CV.pdf", { exact: true }).waitFor({ timeout: 30_000 });
+	const downloaded = await fs.readFile(path.join(sandbox.workspace, "documents", "Rehema Kisanga CV.pdf"), "utf8");
+	check(
+		"a link to a file is downloaded as a document",
+		downloaded === "%PDF-1.4 test" && (await savedLinks()).length === 1,
+	);
+	const queued = await window.evaluate(() => window.desk.agent.state());
+	check("both are handed to the agent, which stays paused", queued.queued === 2 && queued.status === "idle");
+	console.log(await shot(window, `platform-${process.platform}-links`));
+	await window.getByRole("button", { name: /Remove the link to 127\.0\.0\.1/ }).click();
+	await window.getByRole("button", { name: /Remove the link to/ }).waitFor({ state: "detached" });
+	check("a link can be removed", (await savedLinks()).length === 0);
 
 	await window.getByRole("navigation").getByRole("button", { name: "Settings", exact: true }).click();
 	await window.getByRole("heading", { name: "Settings", exact: true }).waitFor();

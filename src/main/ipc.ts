@@ -25,6 +25,7 @@ import {
 import { listCredentials, removeCredential, saveCredential, storageBackend } from "./credentials";
 import { isInside } from "./files";
 import { currentHelpRequest, respondToHelp } from "./help";
+import { addLink, listLinks, removeLink } from "./links";
 import { installBrowser, isBrowserInstalled } from "./runtime";
 import { getSettings, updateSettings } from "./settings";
 import { checkForUpdate, downloadUpdate, installUpdate, updateStatus } from "./updates";
@@ -86,6 +87,9 @@ const handlers: Handlers = {
 			return result.canceled ? listDocuments() : addDocuments(result.filePaths);
 		},
 		remove: removeDocument,
+		links: listLinks,
+		addLink,
+		removeLink,
 	},
 	profile: { read: readAboutMe, write: writeAboutMe },
 	applications: {
@@ -135,6 +139,7 @@ const handlers: Handlers = {
 		activity: () => agent.recentActivity(),
 		onboard: () => agent.onboard(),
 		documentsAdded: (names) => agent.documentsAdded(names),
+		linksAdded: (urls) => agent.linksAdded(urls),
 		setPaused: (paused) => agent.setPaused(paused),
 		stop: () => agent.stop(),
 	},

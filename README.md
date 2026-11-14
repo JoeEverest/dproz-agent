@@ -32,6 +32,7 @@ First launch is a setup screen: add your documents, and it checks the Claude sig
 The main screen is the board. Nothing has to be asked for:
 
 - After setup the agent reads your documents and writes `about-me.md`, its memory of who you are.
+- A source can also be a link, pasted where documents are added. A link to a file (a resume PDF, a Google Doc or Drive file shared with anyone who has the link) is downloaded and becomes a document. A link to a page (a portfolio, a profile) is kept as a link, and the agent reads the page itself, in its browser when the page needs a sign-in.
 - It then searches Dproz on a timer (every 6 hours by default; 4 hours, twice a day and daily are the other choices), looking at jobs posted since the last search. There is no cap: every real fit is pursued.
 - When it needs something only you know, the question appears on the Questions screen, as a chat. Your answer is saved to `about-me.md`, so it is asked once, and the job that was waiting carries on.
 - Each card lists the documents written for that job; clicking one slides a preview out beside the card, with a Download button that saves a copy.
@@ -68,6 +69,7 @@ Everything is ordinary files in the app's data folder (`workspace/` inside it); 
 ```
 about-me.md              what the agent knows about you
 documents/               your originals
+links.json               pages you gave as sources about yourself
 templates/               starting points for the resume and cover letter
 applications/<id>/       one folder per job
   application.json       the card: status, fit, strategy, documents, questions, history
@@ -78,7 +80,7 @@ inbox.json               general questions the agent has asked you
 
 ### Profile settings and Settings
 
-- **Profile settings** (sidebar): the documents the agent holds on you, what it knows about you (`about-me.md`, editable in the app), and site logins. Logins are encrypted with the system keychain (Keychain on macOS, the Secret Service on Linux); on a Linux machine with no keyring the page says so.
+- **Profile settings** (sidebar): the documents and links the agent holds on you, what it knows about you (`about-me.md`, editable in the app), and site logins. Logins are encrypted with the system keychain (Keychain on macOS, the Secret Service on Linux); on a Linux machine with no keyring the page says so.
 - **Settings** (gear, bottom of the sidebar): send automatically (on by default; off means every application waits at Ready to submit and the browser can read but not click, type or upload), how often it searches, the model, and the installed version.
 
 ### Updates
@@ -106,11 +108,12 @@ npm run build
 node tests/e2e/run.mjs platform       # setup, board, questions panel, drawer, settings, vault (no agent run)
 node tests/e2e/run.mjs gallery        # screenshots of every screen, light and dark, with demo cards
 node tests/e2e/run.mjs full           # the whole autonomous flow against a local mock jobs feed and careers portal
+node tests/e2e/run.mjs links          # the agent reads a linked page into about-me.md, against a local page
 npm run pack && node tests/e2e/run.mjs packaged   # the packaged app, including a prepare-only agent run
 ./tests/e2e/linux.sh                  # builds and runs the platform test on Linux in Docker
 ```
 
-`full` and `packaged` use your Claude account. They set `DPROZ_AGENT_TEST_ORIGIN` and point `DPROZ_API_URL` at the mock, which restricts the agent's browser to the mock portal and removes the web tools, so a test with a fictional candidate cannot reach a real employer. Test sandboxes also start paused unless a test turns that off. Keep both in place for any test that lets the agent run.
+`full`, `links` and `packaged` use your Claude account. They set `DPROZ_AGENT_TEST_ORIGIN` and point `DPROZ_API_URL` at the mock, which restricts the agent's browser to the mock portal and removes the web tools, so a test with a fictional candidate cannot reach a real employer. Test sandboxes also start paused unless a test turns that off. Keep both in place for any test that lets the agent run.
 
 ## Packaging and releases
 
