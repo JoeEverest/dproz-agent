@@ -1,6 +1,7 @@
+import fs from "node:fs/promises";
 import path from "node:path";
 import type { DeskApi, SetupStatus } from "@shared/ipc";
-import { dialog, ipcMain, shell } from "electron";
+import { app, dialog, ipcMain, shell } from "electron";
 import { agent } from "./agent/manager";
 import {
 	answerApplicationQuestion,
@@ -104,10 +105,18 @@ const handlers: Handlers = {
 			const target = path.resolve(folder, file);
 			if (isInside(folder, target)) await shell.openPath(target);
 		},
-		showDocument: async (id, file) => {
+		saveDocument: async (id, file) => {
 			const folder = await applicationFolder(id);
-			const target = path.resolve(folder, file);
-			if (isInside(folder, target)) shell.showItemInFolder(target);
+			const source = path.resolve(folder, file);
+			if (!isInside(folder, source)) return null;
+			const suggested = path.join(process.env.DPROZ_AGENT_SAVE_TO ?? app.getPath("downloads"), path.basename(source));
+			// Tests name a folder instead of driving the system's save dialog.
+			const chosen = process.env.DPROZ_AGENT_SAVE_TO
+				? suggested
+				: (await dialog.showSaveDialog({ title: "Save a copy", defaultPath: suggested })).filePath;
+			if (!chosen) return null;
+			await fs.copyFile(source, chosen);
+			return chosen;
 		},
 		submit: (id) => agent.submit(id),
 		addJob: (source, prepareOnly) => agent.addJob(source, prepareOnly),

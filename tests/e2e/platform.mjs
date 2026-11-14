@@ -53,9 +53,12 @@ await new Promise((resolve) => updates.listen(0, "127.0.0.1", resolve));
 const updateUrl = `http://127.0.0.1:${updates.address().port}/api/latest`;
 
 const sandbox = await createSandbox("platform");
+const saveTo = path.join(sandbox.base, "saved");
+await fs.mkdir(saveTo, { recursive: true });
 const { app, window } = await launchApp(sandbox, {
 	DPROZ_AGENT_UPDATE_URL: updateUrl,
 	DPROZ_AGENT_ANTHROPIC_URL: new URL(updateUrl).origin,
+	DPROZ_AGENT_SAVE_TO: saveTo,
 });
 const results = [];
 const check = (name, passed, detail = "") => {
@@ -145,20 +148,30 @@ try {
 	await window.getByRole("button", { name: /Accountant/ }).click();
 	const drawer = window.getByRole("dialog");
 	await drawer.waitFor();
-	check("the card shows its documents", (await drawer.getByRole("button", { name: /Resume/ }).count()) === 1);
-	await drawer.getByRole("button", { name: /Resume/ }).click();
-	const source = await drawer.locator("iframe").getAttribute("src", { timeout: 10_000 });
+	const resumeRow = drawer.getByRole("button", { name: /^Preview Resume/ });
+	check("the card shows its documents", (await resumeRow.count()) === 1);
+	await resumeRow.click();
+	const preview = window.getByRole("complementary", { name: "Preview of Resume" });
+	const source = await preview.locator("iframe").getAttribute("src", { timeout: 10_000 });
 	const served = (url) =>
 		app.evaluate(async ({ net }, target) => {
 			const response = await net.fetch(target).catch(() => null);
 			return response ? [response.status, (await response.text()).slice(0, 4)] : [0, ""];
 		}, url);
 	const [previewStatus, previewStart] = await served(source.split("#")[0]);
-	check("a document opens as a preview inside the card", previewStatus === 200 && previewStart === "%PDF", source);
+	check("a document opens as a preview beside the card", previewStatus === 200 && previewStart === "%PDF", source);
+	check(
+		"the card stays open next to the preview",
+		(await drawer.getByRole("heading", { name: "Accountant" }).count()) === 1,
+	);
 	const [escaped] = await served("desk-doc://application/acme-accountant/..%2F..%2Fabout-me.md");
 	check("the preview cannot reach files outside the card's folder", escaped === 404, String(escaped));
-	await drawer.getByRole("button", { name: "Back to the job" }).click();
-	await drawer.getByRole("button", { name: /Resume/ }).waitFor();
+	await preview.getByRole("button", { name: "Download" }).click();
+	await window.waitForTimeout(800);
+	const copy = await fs.readFile(path.join(saveTo, "Resume.pdf"), "utf8").catch(() => "");
+	check("Download saves a copy of the document", copy.startsWith("%PDF"));
+	await preview.getByRole("button", { name: "Close the preview" }).click();
+	await preview.waitFor({ state: "detached" });
 	await window
 		.getByRole("combobox", { name: "Status" })
 		.or(window.getByRole("button", { name: "Status" }))

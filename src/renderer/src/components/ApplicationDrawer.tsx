@@ -24,7 +24,10 @@ import {
 	Check,
 	CircleDashed,
 	Copy,
+	Download,
 	ExternalLink,
+	Eye,
+	EyeOff,
 	FileText,
 	FolderOpen,
 	Globe,
@@ -38,7 +41,7 @@ import {
 	Trash2,
 	X,
 } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 import { deadline, hostOf, relativeTime } from "../lib/format";
 import { fitLabel, statusIcon } from "./Board";
 import { DocumentPreview } from "./DocumentPreview";
@@ -185,34 +188,54 @@ export function ApplicationDrawer({ application, liveStep, onClose, onChanged }:
 	if (application) lastShown.current = application;
 	const shown = application ?? lastShown.current;
 	const [previewing, setPreviewing] = useState<ApplicationDocument | null>(null);
+	// The panel keeps showing its last document while it slides away, then lets go of it.
+	const [leaving, setLeaving] = useState<ApplicationDocument | null>(null);
 	const openId = application?.id;
 
+	const closePreview = () => {
+		setLeaving(previewing);
+		setPreviewing(null);
+	};
+
 	// A preview belongs to the card it was opened from.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: reset whenever another card (or none) is shown
-	useEffect(() => setPreviewing(null), [openId]);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: close whenever another card (or none) is shown
+	useEffect(closePreview, [openId]);
 
 	// The agent may rewrite or drop a document while it is being previewed.
 	const preview = previewing && shown?.documents.find((document) => document.file === previewing.file);
+	const inPanel = preview ?? leaving;
 
 	return (
 		<Drawer side="right" open={application !== null} onOpenChange={(open) => !open && onClose()}>
 			<DrawerBackdrop className="fixed inset-0 bg-scrim" />
 			<DrawerContent
-				className={`app flex h-full max-w-[92vw] flex-col bg-canvas text-ink shadow-sheet outline-none transition-[width] duration-200 ease-(--ease-out) motion-reduce:transition-none ${
-					preview ? "w-[860px]" : "w-[560px]"
-				}`}
+				style={{ "--preview": "min(660px, calc(100vw - 560px - 24px))" } as CSSProperties}
+				className="app h-full w-[560px] overflow-visible text-ink outline-none"
 			>
-				{shown && preview && (
-					<DocumentPreview applicationId={shown.id} document={preview} onBack={() => setPreviewing(null)} />
+				{shown && inPanel && (
+					<aside
+						aria-label={`Preview of ${inPanel.label}`}
+						data-open={Boolean(preview)}
+						inert={!preview}
+						onTransitionEnd={(event) => {
+							if (event.target === event.currentTarget && !preview) setLeaving(null);
+						}}
+						className="preview-panel absolute top-0 right-full flex h-full w-(--preview) flex-col bg-canvas shadow-sheet"
+					>
+						<DocumentPreview applicationId={shown.id} document={inPanel} onClose={closePreview} />
+					</aside>
 				)}
-				{shown && !preview && (
-					<Sheet
-						application={shown}
-						liveStep={liveStep}
-						onClose={onClose}
-						onChanged={onChanged}
-						onPreview={setPreviewing}
-					/>
+				{shown && (
+					<div className="relative flex size-full flex-col border-l border-line-strong bg-canvas shadow-sheet">
+						<Sheet
+							application={shown}
+							liveStep={liveStep}
+							onClose={onClose}
+							onChanged={onChanged}
+							previewing={preview?.file}
+							onPreview={(document) => (preview?.file === document.file ? closePreview() : setPreviewing(document))}
+						/>
+					</div>
 				)}
 			</DrawerContent>
 		</Drawer>
@@ -224,10 +247,11 @@ type SheetProps = {
 	liveStep?: string;
 	onClose: () => void;
 	onChanged: () => Promise<void>;
+	previewing?: string;
 	onPreview: (document: ApplicationDocument) => void;
 };
 
-function Sheet({ application, liveStep, onClose, onChanged, onPreview }: SheetProps) {
+function Sheet({ application, liveStep, onClose, onChanged, previewing, onPreview }: SheetProps) {
 	const settled = ["closed", "applied", "interview"].includes(application.status);
 	const due = deadline(application.closesAt);
 	const postingUrl = application.jobUrl ?? application.applyUrl;
@@ -374,27 +398,43 @@ function Sheet({ application, liveStep, onClose, onChanged, onPreview }: SheetPr
 							Nothing yet. The tailored resume and cover letter appear here once the agent has written them.
 						</p>
 					) : (
-						<ul className="divide-y divide-line rounded-lg border border-line">
-							{application.documents.map((document) => (
-								<li key={document.file}>
-									<button
-										type="button"
-										onClick={() => onPreview(document)}
-										className="group flex w-full items-center gap-3 px-2.5 py-2 text-left hover:bg-fill"
+						<ul className="flex flex-col gap-1.5">
+							{application.documents.map((document) => {
+								const open = previewing === document.file;
+								return (
+									<li
+										key={document.file}
+										className={`flex items-center gap-1 rounded-lg border pr-1.5 transition-[background-color,border-color] duration-150 ${
+											open ? "border-accent bg-accent-wash" : "border-line bg-fill hover:bg-fill-hover"
+										}`}
 									>
-										<span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-fill-hover text-ink-2">
-											<FileText size={15} strokeWidth={1.75} aria-hidden />
-										</span>
-										<span className="min-w-0 flex-1">
-											<span className="block truncate font-medium">{document.label}</span>
-											<span className="block truncate text-xs text-ink-3">{document.file}</span>
-										</span>
-										<span className="shrink-0 text-xs font-medium text-accent-ink opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100">
-											Preview
-										</span>
-									</button>
-								</li>
-							))}
+										<button
+											type="button"
+											aria-pressed={open}
+											aria-label={`Preview ${document.label}: ${document.file}`}
+											onClick={() => onPreview(document)}
+											className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg py-2.5 pr-1 pl-3 text-left"
+										>
+											<FileText size={16} strokeWidth={1.75} className="shrink-0 text-accent" aria-hidden />
+											<span className="min-w-0 flex-1 truncate font-medium">{document.file}</span>
+											<Chip>{document.label}</Chip>
+										</button>
+										<IconButton label={open ? "Close the preview" : "Preview"} onClick={() => onPreview(document)}>
+											{open ? (
+												<EyeOff size={15} strokeWidth={1.75} aria-hidden />
+											) : (
+												<Eye size={15} strokeWidth={1.75} aria-hidden />
+											)}
+										</IconButton>
+										<IconButton
+											label={`Download ${document.label}`}
+											onClick={() => void window.desk.applications.saveDocument(application.id, document.file)}
+										>
+											<Download size={15} strokeWidth={1.75} aria-hidden />
+										</IconButton>
+									</li>
+								);
+							})}
 						</ul>
 					)}
 				</Section>

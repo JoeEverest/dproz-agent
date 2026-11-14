@@ -137,7 +137,8 @@ export type DeskApi = {
 		remove(id: string): Promise<void>;
 		openFolder(id: string): Promise<void>;
 		openDocument(id: string, file: string): Promise<void>;
-		showDocument(id: string, file: string): Promise<void>;
+		/** Saves a copy where the user chooses; resolves to the saved path, or null when cancelled. */
+		saveDocument(id: string, file: string): Promise<string | null>;
 		submit(id: string): Promise<void>;
 		addJob(source: string, prepareOnly: boolean): Promise<void>;
 	};
@@ -195,7 +196,7 @@ export const DESK_METHODS = {
 		"remove",
 		"openFolder",
 		"openDocument",
-		"showDocument",
+		"saveDocument",
 		"submit",
 		"addJob",
 	],
