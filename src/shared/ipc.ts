@@ -26,6 +26,9 @@ export type ConnectionStatus =
 
 export type EndpointInput = { baseUrl: string; model: string; token?: string };
 
+/** What an endpoint offers: `models` are ready to use; `cloud` are Ollama cloud models reachable through it. */
+export type EndpointModels = { reachable: boolean; models: string[]; cloud: string[] };
+
 export type SetupStatus = {
 	claude: ClaudeStatus;
 	connection: ConnectionStatus;
@@ -161,6 +164,9 @@ export type DeskApi = {
 	claude: {
 		setApiKey(key: string): Promise<SetupStatus>;
 		setEndpoint(endpoint: EndpointInput): Promise<SetupStatus>;
+		/** Lists the models at an address, or at the saved endpoint when none is given. */
+		endpointModels(endpoint?: { baseUrl: string; token?: string }): Promise<EndpointModels>;
+		setEndpointModel(model: string): Promise<SetupStatus>;
 		clearConnection(): Promise<SetupStatus>;
 	};
 	updates: {
@@ -186,7 +192,7 @@ export const DESK_METHODS = {
 	credentials: ["list", "save", "remove"],
 	agent: ["state", "activity", "onboard", "documentsAdded", "setPaused", "stop"],
 	help: ["current", "respond"],
-	claude: ["setApiKey", "setEndpoint", "clearConnection"],
+	claude: ["setApiKey", "setEndpoint", "endpointModels", "setEndpointModel", "clearConnection"],
 	updates: ["status", "check"],
 	shell: ["openExternal", "open"],
 } as const satisfies { [Area in RemoteAreas]: readonly (keyof DeskApi[Area])[] };

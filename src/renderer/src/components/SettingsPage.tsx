@@ -17,7 +17,7 @@ import { fileSize, relativeTime } from "../lib/format";
 import { useResource } from "../lib/hooks";
 import { Markdown } from "./Markdown";
 import { PageHeader } from "./PageHeader";
-import { ProviderForm } from "./ProviderForm";
+import { ModelChoice, ProviderForm } from "./ProviderForm";
 import { Button, Field, IconButton, Input, Notice, Picker, Textarea, Toggle } from "./ui";
 
 type GroupProps = { title: string; note?: string; action?: ReactNode; children: ReactNode };
@@ -388,11 +388,7 @@ function AgentGroup({ settings, onChange, setup }: Props & { setup: SetupResourc
 				}
 			/>
 			{connection?.kind === "custom" ? (
-				<Row
-					title="Model"
-					note="Set with the endpoint under Model provider."
-					control={<span className="selectable font-medium">{connection.model}</span>}
-				/>
+				<EndpointModelRow model={connection.model} setup={setup} />
 			) : (
 				claude?.signedIn && (
 					<Row
@@ -411,6 +407,42 @@ function AgentGroup({ settings, onChange, setup }: Props & { setup: SetupResourc
 				)
 			)}
 		</Group>
+	);
+}
+
+function EndpointModelRow({ model, setup }: { model: string; setup: SetupResource }) {
+	const offered = useResource(() => window.desk.claude.endpointModels());
+	const [changing, setChanging] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const change = async (next: string) => {
+		if (!next.trim() || next === model) return;
+		setChanging(true);
+		setError(null);
+		try {
+			setup.setData(await window.desk.claude.setEndpointModel(next));
+		} catch (cause) {
+			setError((cause as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ""));
+		} finally {
+			setChanging(false);
+		}
+	};
+
+	return (
+		<Row
+			title="Model"
+			note={error ?? (changing ? "Checking that the endpoint can run it." : "One of the models your endpoint offers.")}
+			control={
+				<ModelChoice
+					key={model}
+					commitOnBlur
+					offered={offered.data ?? null}
+					value={model}
+					onChange={(next) => void change(next)}
+					className="w-[220px]"
+				/>
+			}
+		/>
 	);
 }
 

@@ -30,7 +30,15 @@ const updates = http.createServer((request, response) => {
 	if (request.url.startsWith("/v1/models")) {
 		const refused = request.headers["x-api-key"] === "sk-ant-refused";
 		response.statusCode = refused ? 401 : 200;
-		response.end(JSON.stringify(refused ? { type: "error" } : { data: [] }));
+		response.end(
+			JSON.stringify(refused ? { type: "error" } : { data: [{ id: "open-model:14b" }, { id: "other-model" }] }),
+		);
+		return;
+	}
+	// Not an Ollama server, so the app never goes on to ask ollama.com for cloud models.
+	if (request.url.startsWith("/api/version")) {
+		response.statusCode = 404;
+		response.end("{}");
 		return;
 	}
 	response.end(
@@ -222,13 +230,23 @@ try {
 
 	const endpointUrl = new URL(updateUrl).origin;
 	await openForm();
-	await window.getByRole("radio", { name: "Another endpoint" }).click();
+	await window.getByRole("button", { name: "Another endpoint" }).click();
 	await window.getByRole("textbox", { name: "Address" }).fill(`${endpointUrl}/v1/messages`);
+	const modelPicker = window.locator("form").getByRole("combobox", { name: "Model" });
+	await modelPicker.waitFor({ timeout: 15_000 });
+	await modelPicker.click();
+	check(
+		"the models the endpoint offers are listed to pick from",
+		(await window.getByRole("option", { name: "other-model" }).count()) === 1,
+	);
+	await window.getByRole("option", { name: "Type a name…" }).click();
 	await window.getByRole("textbox", { name: "Model" }).fill("no-such-model");
 	await window.getByRole("button", { name: "Use this endpoint" }).click();
 	await window.getByText("model 'no-such-model' not found").waitFor({ timeout: 20_000 });
 	check("an endpoint without the named model is not saved", (await status()).connection.kind === "claude-code");
-	await window.getByRole("textbox", { name: "Model" }).fill("open-model:14b");
+	await window.getByRole("button", { name: "Pick from the list" }).click();
+	await modelPicker.click();
+	await window.getByRole("option", { name: "open-model:14b" }).click();
 	await window.getByRole("textbox", { name: "Token" }).fill("refused-token");
 	await window.getByRole("button", { name: "Use this endpoint" }).click();
 	await window.getByText("did not accept the token").waitFor({ timeout: 20_000 });
@@ -250,8 +268,12 @@ try {
 		!(await sealed()).includes("secret-endpoint-token"),
 	);
 	await shot(window, `platform-${process.platform}-endpoint`);
+	await window.getByRole("combobox", { name: "Model" }).click();
+	await window.getByRole("option", { name: "other-model" }).click();
+	await window.getByText(`other-model at ${endpointUrl}`).waitFor({ timeout: 30_000 });
+	check("the model can be switched from Settings", (await status()).connection.model === "other-model");
 	await window.getByRole("button", { name: "Remove", exact: true }).click();
-	await window.getByText(`open-model:14b at ${endpointUrl}`).waitFor({ state: "detached", timeout: 30_000 });
+	await window.getByText(`other-model at ${endpointUrl}`).waitFor({ state: "detached", timeout: 30_000 });
 	check("removing the endpoint clears it", (await status()).connection.kind === "claude-code");
 
 	const updateIcon = window.getByRole("navigation").getByRole("button", { name: /is available/ });

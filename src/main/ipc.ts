@@ -13,7 +13,14 @@ import {
 	watchApplications,
 } from "./applications";
 import { claudeStatus } from "./claude";
-import { clearConnection, connectionStatus, saveApiKey, saveEndpoint } from "./connection";
+import {
+	changeEndpointModel,
+	clearConnection,
+	connectionStatus,
+	endpointModels,
+	saveApiKey,
+	saveEndpoint,
+} from "./connection";
 import { listCredentials, removeCredential, saveCredential, storageBackend } from "./credentials";
 import { isInside } from "./files";
 import { currentHelpRequest, respondToHelp } from "./help";
@@ -125,6 +132,11 @@ const handlers: Handlers = {
 		},
 		setEndpoint: async (endpoint) => {
 			await saveEndpoint(endpoint);
+			return setupStatus();
+		},
+		endpointModels,
+		setEndpointModel: async (model) => {
+			await changeEndpointModel(model);
 			return setupStatus();
 		},
 		clearConnection: async () => {

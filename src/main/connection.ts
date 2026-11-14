@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { ConnectionStatus, EndpointInput } from "@shared/ipc";
+import type { ConnectionStatus, EndpointInput, EndpointModels } from "@shared/ipc";
 import { app } from "electron";
 import { seal, unseal } from "./credentials";
 import { writeFileAtomic } from "./files";
@@ -144,6 +144,11 @@ export async function saveEndpoint(input: EndpointInput) {
 	}
 
 	if (response.status === 401 || response.status === 403) {
+		if (!token && /cloud$/i.test(model)) {
+			throw new Error(
+				"Ollama has to be signed in before it can use cloud models. Run `ollama signin` in a terminal, then try again.",
+			);
+		}
 		throw new Error(token ? "That server did not accept the token." : "That server needs a token.");
 	}
 	if (!response.ok) {
@@ -155,4 +160,59 @@ export async function saveEndpoint(input: EndpointInput) {
 		throw new Error(`The server answered ${response.status}${detail ? `: ${detail}` : "."}`);
 	}
 	await save({ kind: "custom", baseUrl, model, token, header });
+}
+
+export async function changeEndpointModel(model: string) {
+	if (stored?.kind !== "custom") throw new Error("No endpoint is set up.");
+	await saveEndpoint({ baseUrl: stored.baseUrl, token: stored.token, model });
+}
+
+const OLLAMA_CLOUD = "https://ollama.com";
+
+async function modelIds(baseUrl: string, token?: string): Promise<string[] | null> {
+	try {
+		const response = await fetch(`${baseUrl}/v1/models`, {
+			headers: token ? { authorization: `Bearer ${token}`, "x-api-key": token } : {},
+			signal: AbortSignal.timeout(8_000),
+		});
+		if (!response.ok) return [];
+		const body = (await response.json()) as { data?: { id?: string }[] };
+		return (body.data ?? []).map((model) => model.id).filter((id): id is string => Boolean(id));
+	} catch {
+		return null;
+	}
+}
+
+async function isLocalOllama(baseUrl: string) {
+	try {
+		const response = await fetch(`${baseUrl}/api/version`, { signal: AbortSignal.timeout(4_000) });
+		return response.ok && typeof ((await response.json()) as { version?: unknown }).version === "string";
+	} catch {
+		return false;
+	}
+}
+
+/** A cloud model's name when it is reached through a local Ollama: gemma4 -> gemma4:cloud, gpt-oss:120b -> gpt-oss:120b-cloud. */
+const throughLocalOllama = (name: string) => (name.includes(":") ? `${name}-cloud` : `${name}:cloud`);
+
+export async function endpointModels(input?: { baseUrl: string; token?: string }): Promise<EndpointModels> {
+	const saved = stored?.kind === "custom" ? stored : undefined;
+	if (!input && !saved) return { reachable: false, models: [], cloud: [] };
+	let baseUrl: string;
+	try {
+		baseUrl = input ? normalizeBaseUrl(input.baseUrl) : (saved?.baseUrl as string);
+	} catch {
+		return { reachable: false, models: [], cloud: [] };
+	}
+	const token = input ? input.token?.trim() || undefined : saved?.token;
+	const models = await modelIds(baseUrl, token);
+	if (models === null) return { reachable: false, models: [], cloud: [] };
+
+	// A local Ollama can also run Ollama's cloud models once it is signed in; offer those by name.
+	let cloud: string[] = [];
+	if (new URL(baseUrl).hostname !== new URL(OLLAMA_CLOUD).hostname && (await isLocalOllama(baseUrl))) {
+		const offered = (await modelIds(OLLAMA_CLOUD)) ?? [];
+		cloud = offered.map(throughLocalOllama).filter((name) => !models.includes(name));
+	}
+	return { reachable: true, models: [...models].sort(), cloud: cloud.sort() };
 }

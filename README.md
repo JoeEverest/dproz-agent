@@ -10,7 +10,7 @@ It is local only: no Dproz account, no server, no sync. The agent runs on the Cl
 - Your own model, one of:
   - [Claude Code](https://claude.com/claude-code) installed and signed in (`claude` in a terminal).
   - An Anthropic API key.
-  - Another endpoint that speaks the Anthropic Messages API: a gateway, or [Ollama](https://docs.ollama.com/integrations/claude-code) for open-weight models. You give its address, a model name and, if it needs one, a token.
+  - Another endpoint that speaks the Anthropic Messages API: a gateway, or [Ollama](https://docs.ollama.com/integrations/claude-code) for open-weight models. You give its address and, if it needs one, a token, then pick a model from the ones it lists (for Ollama that is what is installed plus its cloud models) or type any name. The model can be switched later under Settings.
 
   The last two are set during setup or under Settings, Model provider. They are checked before they are saved, stored encrypted, and win over the Claude Code sign-in while set. Models other than Claude are not supported by Anthropic and may handle the agent's work poorly; use one that supports tools, with a context of at least 64k.
 - Node 22 or newer to build.
