@@ -1,7 +1,8 @@
 /**
  * Prints a resume from structured data in one of five layouts, ported from the resume tailoring in
  * Dproz Fit Check. The layouts keep their markup and proportions; what changed for this app is that they
- * print to A4 with page margins, sizes are in points, and nothing is fetched from the network.
+ * print to A4 with page margins, sizes are in points, and nothing is fetched from the network: the one
+ * web font they use is embedded.
  */
 import { RESUME_SECTIONS, type Resume, type ResumeSection, type ResumeTemplateId } from "@shared/resume";
 import {
@@ -94,7 +95,11 @@ function skills(markdown?: string | null) {
 
 export type Layout = { template: ResumeTemplateId; sectionOrder?: ResumeSection[] };
 
-export function renderResume(resume: Resume, layout: Layout): string {
+/**
+ * `fonts` is @font-face CSS for the typefaces a layout names that are not on every computer. Without
+ * it a layout falls back to the system fonts in its stack.
+ */
+export function renderResume(resume: Resume, layout: Layout, fonts = ""): string {
 	const template = TEMPLATES[layout.template];
 	const title = (key: ResumeSection) => template.titles?.[key] ?? TITLES[key];
 	const languages = resume.languages ?? [];
@@ -123,7 +128,7 @@ export function renderResume(resume: Resume, layout: Layout): string {
 <head>
 <meta charset="utf-8">
 <title>${escapeHtml(fullName(resume.contact))} – Resume</title>
-<style>${BASE}${template.css}</style>
+<style>${fonts}${BASE}${template.css}</style>
 </head>
 <body>
 ${template.header(resume)}

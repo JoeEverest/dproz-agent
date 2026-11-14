@@ -27,6 +27,7 @@ import { exists, readText, writeJson } from "../files";
 import { requestHelp } from "../help";
 import { notify } from "../notify";
 import { renderHtmlToPdf, renderPdf } from "../pdf";
+import { resumeFonts } from "../resume/fonts";
 import { renderResume } from "../resume/render";
 import { reviewResume } from "../resume/review";
 import { resolveInWorkspace, workspacePaths } from "../workspace";
@@ -274,7 +275,8 @@ Lists are Markdown text with one "- " line for each item. Wrap a few words in **
 				guarded(async ({ pdf, template, sectionOrder, resume }) => {
 					const target = await resolveInWorkspace(pdf);
 					const folder = path.dirname(target);
-					const { pages } = await renderHtmlToPdf(renderResume(resume, { template, sectionOrder }), target);
+					const html = renderResume(resume, { template, sectionOrder }, await resumeFonts());
+					const { pages } = await renderHtmlToPdf(html, target);
 					const json = path.join(folder, "resume.json");
 					await writeJson(json, resume);
 

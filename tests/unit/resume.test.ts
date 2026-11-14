@@ -49,6 +49,14 @@ describe("renderResume", () => {
 		}
 	});
 
+	it("embeds the font it is given and still fetches nothing", () => {
+		const face = '@font-face { font-family: "Libre Franklin"; src: url(data:font/woff2;base64,AAAA) format("woff2"); }';
+		const html = renderResume(resume, { template: "minimal" }, face);
+		expect(html).toContain(`<style>${face}`);
+		expect(html).toContain('font-family: "Libre Franklin", -apple-system');
+		expect(html).not.toMatch(/https?:\/\//);
+	});
+
 	it("sets labelled skills as rows and a plain list as one run of text", () => {
 		const labelled = renderResume(resume, { template: "modern" });
 		expect(labelled).toContain('<span class="group">Accounting</span>');

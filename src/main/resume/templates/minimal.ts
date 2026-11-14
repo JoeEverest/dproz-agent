@@ -11,12 +11,12 @@ import {
 } from "../html";
 import type { Template } from "../render";
 
-// The original asks Google Fonts for Libre Franklin. A resume cannot depend on the network at print time,
-// so this one uses the system sans-serif the original fell back to.
+// Set in Libre Franklin, as in Fit Check. The font is embedded when the resume is printed (see fonts.ts);
+// the rest of the stack is what the original fell back to.
 const css = `
 @page { size: A4; margin: 19mm 20mm; }
 :root { --ink: #0e0e0f; --muted: #1c1c1c; --faint: #3f3f3f; --rule: #c8c8c8; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+body { font-family: "Libre Franklin", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 	font-size: 10pt; line-height: 1.4; }
 header { margin-bottom: 19pt; text-align: center; }
 h1 { font-size: 20.5pt; font-weight: 700; line-height: 1.15; }

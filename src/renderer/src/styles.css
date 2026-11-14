@@ -116,6 +116,7 @@
 @theme inline {
 	--font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Ubuntu, sans-serif;
 	--font-setup: "Plus Jakarta Sans Variable", "Inter Variable", sans-serif;
+	--font-document: "Libre Franklin Variable", "Inter Variable", sans-serif;
 	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
 	--color-canvas: var(--canvas);
@@ -318,8 +319,9 @@ button {
 .master-record {
 	min-height: 320px;
 	outline: none;
-	font-size: 13px;
-	line-height: 1.65;
+	font-family: var(--font-document);
+	font-size: 14px;
+	line-height: 1.45;
 	color: var(--ink);
 	caret-color: var(--accent);
 }
@@ -333,7 +335,7 @@ button {
 }
 
 .master-record p {
-	margin: 0 0 6px;
+	margin: 0 0 4px;
 }
 
 .master-record h1 {
@@ -344,8 +346,8 @@ button {
 }
 
 .master-record h2 {
-	margin: 30px 0 10px;
-	padding-bottom: 6px;
+	margin: 26px 0 8px;
+	padding-bottom: 5px;
 	border-bottom: 1px solid var(--line-strong);
 	font-size: 12px;
 	font-weight: 600;
@@ -355,8 +357,8 @@ button {
 }
 
 .master-record h3 {
-	margin: 16px 0 4px;
-	font-size: 13px;
+	margin: 14px 0 3px;
+	font-size: 14px;
 	font-weight: 600;
 }
 
@@ -366,7 +368,7 @@ button {
 
 .master-record ul,
 .master-record ol {
-	margin: 0 0 8px;
+	margin: 0 0 6px;
 	padding-left: 18px;
 }
 
@@ -379,7 +381,7 @@ button {
 }
 
 .master-record li {
-	margin-bottom: 3px;
+	margin-bottom: 1px;
 	padding-left: 2px;
 }
 
@@ -404,7 +406,7 @@ button {
 
 /* What belongs in a section that is still empty. Not part of the document. */
 .master-record .section-hint {
-	margin: 0 0 6px;
+	margin: 0 0 4px;
 	color: var(--ink-4);
 	cursor: text;
 	user-select: none;
