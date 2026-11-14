@@ -1,3 +1,4 @@
+import type { ApplicationDocument } from "@shared/application";
 import { APPLICATION_STATUSES, type Application, type ApplicationStatus, STATUS_LABELS } from "@shared/application";
 import {
 	AlertDialog,
@@ -37,9 +38,10 @@ import {
 	Trash2,
 	X,
 } from "lucide-react";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { deadline, hostOf, relativeTime } from "../lib/format";
 import { fitLabel, statusIcon } from "./Board";
+import { DocumentPreview } from "./DocumentPreview";
 import { Markdown } from "./Markdown";
 import { QuestionForm } from "./QuestionForm";
 import { Button, buttonClass, Chip, IconButton, Picker } from "./ui";
@@ -182,20 +184,50 @@ export function ApplicationDrawer({ application, liveStep, onClose, onChanged }:
 	const lastShown = useRef<Application | null>(null);
 	if (application) lastShown.current = application;
 	const shown = application ?? lastShown.current;
+	const [previewing, setPreviewing] = useState<ApplicationDocument | null>(null);
+	const openId = application?.id;
+
+	// A preview belongs to the card it was opened from.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reset whenever another card (or none) is shown
+	useEffect(() => setPreviewing(null), [openId]);
+
+	// The agent may rewrite or drop a document while it is being previewed.
+	const preview = previewing && shown?.documents.find((document) => document.file === previewing.file);
 
 	return (
 		<Drawer side="right" open={application !== null} onOpenChange={(open) => !open && onClose()}>
 			<DrawerBackdrop className="fixed inset-0 bg-scrim" />
-			<DrawerContent className="app flex h-full w-[560px] max-w-[92vw] flex-col bg-canvas text-ink shadow-sheet outline-none">
-				{shown && <Sheet application={shown} liveStep={liveStep} onClose={onClose} onChanged={onChanged} />}
+			<DrawerContent
+				className={`app flex h-full max-w-[92vw] flex-col bg-canvas text-ink shadow-sheet outline-none transition-[width] duration-200 ease-(--ease-out) motion-reduce:transition-none ${
+					preview ? "w-[860px]" : "w-[560px]"
+				}`}
+			>
+				{shown && preview && (
+					<DocumentPreview applicationId={shown.id} document={preview} onBack={() => setPreviewing(null)} />
+				)}
+				{shown && !preview && (
+					<Sheet
+						application={shown}
+						liveStep={liveStep}
+						onClose={onClose}
+						onChanged={onChanged}
+						onPreview={setPreviewing}
+					/>
+				)}
 			</DrawerContent>
 		</Drawer>
 	);
 }
 
-type SheetProps = { application: Application; liveStep?: string; onClose: () => void; onChanged: () => Promise<void> };
+type SheetProps = {
+	application: Application;
+	liveStep?: string;
+	onClose: () => void;
+	onChanged: () => Promise<void>;
+	onPreview: (document: ApplicationDocument) => void;
+};
 
-function Sheet({ application, liveStep, onClose, onChanged }: SheetProps) {
+function Sheet({ application, liveStep, onClose, onChanged, onPreview }: SheetProps) {
 	const settled = ["closed", "applied", "interview"].includes(application.status);
 	const due = deadline(application.closesAt);
 	const postingUrl = application.jobUrl ?? application.applyUrl;
@@ -347,7 +379,7 @@ function Sheet({ application, liveStep, onClose, onChanged }: SheetProps) {
 								<li key={document.file}>
 									<button
 										type="button"
-										onClick={() => void window.desk.applications.openDocument(application.id, document.file)}
+										onClick={() => onPreview(document)}
 										className="group flex w-full items-center gap-3 px-2.5 py-2 text-left hover:bg-fill"
 									>
 										<span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-fill-hover text-ink-2">
@@ -358,7 +390,7 @@ function Sheet({ application, liveStep, onClose, onChanged }: SheetProps) {
 											<span className="block truncate text-xs text-ink-3">{document.file}</span>
 										</span>
 										<span className="shrink-0 text-xs font-medium text-accent-ink opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100">
-											Open
+											Preview
 										</span>
 									</button>
 								</li>

@@ -137,6 +137,7 @@ export type DeskApi = {
 		remove(id: string): Promise<void>;
 		openFolder(id: string): Promise<void>;
 		openDocument(id: string, file: string): Promise<void>;
+		showDocument(id: string, file: string): Promise<void>;
 		submit(id: string): Promise<void>;
 		addJob(source: string, prepareOnly: boolean): Promise<void>;
 	};
@@ -187,7 +188,17 @@ export const DESK_METHODS = {
 	setup: ["status", "installBrowser", "chooseWorkspace"],
 	documents: ["list", "add", "pick", "remove"],
 	profile: ["read", "write"],
-	applications: ["list", "setStatus", "answer", "remove", "openFolder", "openDocument", "submit", "addJob"],
+	applications: [
+		"list",
+		"setStatus",
+		"answer",
+		"remove",
+		"openFolder",
+		"openDocument",
+		"showDocument",
+		"submit",
+		"addJob",
+	],
 	inbox: ["list", "answer"],
 	credentials: ["list", "save", "remove"],
 	agent: ["state", "activity", "onboard", "documentsAdded", "setPaused", "stop"],

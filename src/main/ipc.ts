@@ -104,6 +104,11 @@ const handlers: Handlers = {
 			const target = path.resolve(folder, file);
 			if (isInside(folder, target)) await shell.openPath(target);
 		},
+		showDocument: async (id, file) => {
+			const folder = await applicationFolder(id);
+			const target = path.resolve(folder, file);
+			if (isInside(folder, target)) shell.showItemInFolder(target);
+		},
 		submit: (id) => agent.submit(id),
 		addJob: (source, prepareOnly) => agent.addJob(source, prepareOnly),
 	},

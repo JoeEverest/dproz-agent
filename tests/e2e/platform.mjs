@@ -146,6 +146,19 @@ try {
 	const drawer = window.getByRole("dialog");
 	await drawer.waitFor();
 	check("the card shows its documents", (await drawer.getByRole("button", { name: /Resume/ }).count()) === 1);
+	await drawer.getByRole("button", { name: /Resume/ }).click();
+	const source = await drawer.locator("iframe").getAttribute("src", { timeout: 10_000 });
+	const served = (url) =>
+		app.evaluate(async ({ net }, target) => {
+			const response = await net.fetch(target).catch(() => null);
+			return response ? [response.status, (await response.text()).slice(0, 4)] : [0, ""];
+		}, url);
+	const [previewStatus, previewStart] = await served(source.split("#")[0]);
+	check("a document opens as a preview inside the card", previewStatus === 200 && previewStart === "%PDF", source);
+	const [escaped] = await served("desk-doc://application/acme-accountant/..%2F..%2Fabout-me.md");
+	check("the preview cannot reach files outside the card's folder", escaped === 404, String(escaped));
+	await drawer.getByRole("button", { name: "Back to the job" }).click();
+	await drawer.getByRole("button", { name: /Resume/ }).waitFor();
 	await window
 		.getByRole("combobox", { name: "Status" })
 		.or(window.getByRole("button", { name: "Status" }))

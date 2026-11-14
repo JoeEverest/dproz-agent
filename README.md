@@ -34,6 +34,7 @@ The main screen is the board. Nothing has to be asked for:
 - After setup the agent reads your documents and writes `about-me.md`, its memory of who you are.
 - It then searches Dproz on a timer (every 6 hours by default; 4 hours, twice a day and daily are the other choices), looking at jobs posted since the last search. There is no cap: every real fit is pursued.
 - When it needs something only you know, the question appears on the Questions screen, as a chat. Your answer is saved to `about-me.md`, so it is asked once, and the job that was waiting carries on.
+- Each card lists the documents written for that job; clicking one previews it inside the card, with Open and Show in folder beside it.
 - **Add a job** takes a link or pasted posting for a job you found yourself, to apply to or only prepare.
 - Pause stops the current run and holds everything until you resume.
 

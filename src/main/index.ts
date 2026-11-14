@@ -5,10 +5,12 @@ import { onStatusChange, watchApplications } from "./applications";
 import { loadConnection } from "./connection";
 import { registerIpc } from "./ipc";
 import { notifyStatus } from "./notify";
+import { registerPreviewScheme, servePreviews } from "./preview";
 import { startUpdateChecks } from "./updates";
 import { ensureWorkspace } from "./workspace";
 
 if (process.env.DPROZ_AGENT_USER_DATA) app.setPath("userData", process.env.DPROZ_AGENT_USER_DATA);
+registerPreviewScheme();
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -37,6 +39,8 @@ function createWindow() {
 			preload: path.join(import.meta.dirname, "../preload/index.cjs"),
 			sandbox: true,
 			contextIsolation: true,
+			// The built-in PDF viewer, for previewing documents inside the window.
+			plugins: true,
 		},
 	});
 
@@ -106,6 +110,7 @@ if (!app.requestSingleInstanceLock()) {
 		if (!app.isPackaged) app.dock?.setIcon(appIcon());
 		await ensureWorkspace();
 		await loadConnection();
+		servePreviews();
 		await agent.load();
 		registerIpc();
 		onStatusChange(notifyStatus);
