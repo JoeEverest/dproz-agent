@@ -1,0 +1,242 @@
+import { Textarea } from "@ui-sdk/react/textarea";
+import { ArrowUp, Bot, Briefcase, CheckCheck, ChevronLeft, ChevronRight, CornerDownRight } from "lucide-react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
+import { useAgentState } from "../lib/agent";
+import { relativeTime } from "../lib/format";
+import type { OpenQuestion } from "../lib/questions";
+import { PageHeader } from "./PageHeader";
+import { Chip, IconButton } from "./ui";
+
+const sendKey = navigator.platform.startsWith("Mac") ? "⌘ Return" : "Ctrl Enter";
+
+function Avatar() {
+	return (
+		<span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-ink">
+			<Bot size={15} strokeWidth={1.75} aria-hidden />
+		</span>
+	);
+}
+
+type AgentMessageProps = { question: OpenQuestion; replying: boolean; canPick: boolean; onPick: () => void };
+
+function AgentMessage({ question, replying, canPick, onPick }: AgentMessageProps) {
+	return (
+		<li className="flex items-start gap-2.5">
+			<Avatar />
+			<div className="min-w-0 max-w-[78%]">
+				<p className="mb-1 flex items-baseline gap-2 text-xs">
+					<span className="font-medium">Dproz Agent</span>
+					<time dateTime={question.askedAt} className="text-ink-3 tabular-nums">
+						{relativeTime(question.askedAt)}
+					</time>
+				</p>
+				<div className="rounded-2xl rounded-tl-md bg-fill-hover px-3.5 py-2.5">
+					{question.about && (
+						<p className="mb-1.5 flex items-center gap-1.5 text-xs text-ink-3">
+							<Briefcase size={12} strokeWidth={1.75} className="shrink-0" aria-hidden />
+							<span className="truncate">{question.about.label}</span>
+						</p>
+					)}
+					<p className="selectable text-pretty">{question.question}</p>
+					{question.why && <p className="selectable mt-1 text-xs text-ink-2">{question.why}</p>}
+				</div>
+				{!question.answer && canPick && (
+					<p className="mt-1 pl-1 text-xs">
+						{replying ? (
+							<span className="font-medium text-accent-ink">Answering this one below</span>
+						) : (
+							<button type="button" className="font-medium text-ink-3 hover:text-ink" onClick={onPick}>
+								Answer this one
+							</button>
+						)}
+					</p>
+				)}
+			</div>
+		</li>
+	);
+}
+
+function UserMessage({ question }: { question: OpenQuestion }) {
+	return (
+		<li className="flex flex-col items-end">
+			<p className="selectable max-w-[78%] rounded-2xl rounded-tr-md bg-solid px-3.5 py-2.5 whitespace-pre-wrap text-on-solid">
+				{question.answer}
+			</p>
+			<p className="mt-1 flex items-center gap-1 pr-1 text-xs text-ink-3">
+				{question.deliveredAt && <CheckCheck size={12} strokeWidth={2} className="text-accent" aria-hidden />}
+				{question.deliveredAt ? "Saved to what the agent knows" : "Sent"}
+				{question.answeredAt && <span className="tabular-nums"> · {relativeTime(question.answeredAt)}</span>}
+			</p>
+		</li>
+	);
+}
+
+function Working({ label }: { label: string }) {
+	return (
+		<li className="flex items-center gap-2.5" aria-live="polite">
+			<Avatar />
+			<p className="flex items-center gap-2 rounded-2xl rounded-tl-md bg-fill-hover px-3.5 py-2.5 text-ink-2">
+				<span className="flex gap-1" aria-hidden>
+					<span className="live-dot size-1.5 rounded-full bg-ink-3" />
+					<span className="live-dot size-1.5 rounded-full bg-ink-3 [animation-delay:0.2s]" />
+					<span className="live-dot size-1.5 rounded-full bg-ink-3 [animation-delay:0.4s]" />
+				</span>
+				{label}
+			</p>
+		</li>
+	);
+}
+
+type ComposerProps = {
+	open: OpenQuestion[];
+	target: OpenQuestion | undefined;
+	onPick: (id: string) => void;
+	onAnswer: (question: OpenQuestion, text: string) => Promise<void>;
+};
+
+function Composer({ open, target, onPick, onAnswer }: ComposerProps) {
+	const [draft, setDraft] = useState("");
+	const [saving, setSaving] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const position = target ? open.indexOf(target) : 0;
+
+	const submit = async (event: FormEvent) => {
+		event.preventDefault();
+		if (!target || !draft.trim()) return;
+		setSaving(true);
+		setError(null);
+		try {
+			await onAnswer(target, draft.trim());
+			setDraft("");
+		} catch (cause) {
+			setError(`That did not send: ${(cause as Error).message}`);
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	const step = (by: number) => {
+		onPick(open[(position + by + open.length) % open.length].id);
+		setDraft("");
+	};
+
+	return (
+		<form onSubmit={(event) => void submit(event)} className="mx-auto w-full max-w-[720px] shrink-0 px-6 pb-5">
+			<div className="rounded-2xl border border-line-strong bg-surface shadow-[0_1px_2px_rgb(18_19_22/4%)] transition-[border-color] duration-150 focus-within:border-accent">
+				{target && (
+					<div className="flex items-center gap-2 border-b border-line py-1.5 pr-1.5 pl-3.5 text-xs">
+						<CornerDownRight size={13} strokeWidth={1.75} className="shrink-0 text-ink-3" aria-hidden />
+						<span className="shrink-0 text-ink-3">Replying to</span>
+						<span className="min-w-0 flex-1 truncate font-medium text-ink-2">{target.question}</span>
+						{open.length > 1 ? (
+							<span className="flex shrink-0 items-center text-ink-3 tabular-nums">
+								<IconButton label="Previous question" className="size-6" onClick={() => step(-1)}>
+									<ChevronLeft size={14} strokeWidth={1.75} aria-hidden />
+								</IconButton>
+								{position + 1} of {open.length}
+								<IconButton label="Next question" className="size-6" onClick={() => step(1)}>
+									<ChevronRight size={14} strokeWidth={1.75} aria-hidden />
+								</IconButton>
+							</span>
+						) : (
+							<span className="h-6" />
+						)}
+					</div>
+				)}
+				<Textarea
+					key={target?.id ?? "none"}
+					rows={2}
+					autoResize
+					disabled={!target}
+					value={draft}
+					onValueChange={(value) => setDraft(value)}
+					submitShortcut="mod+enter"
+					placeholder={target ? "Your answer" : "Nothing to answer right now"}
+					aria-label={target ? target.question : "Your answer"}
+					style={{ outline: "none" }}
+					className="block max-h-40 w-full resize-none bg-transparent px-3.5 pt-3 text-[13px] leading-normal text-ink placeholder:text-ink-4"
+				/>
+				<div className="flex items-center justify-between gap-3 pt-1 pr-2 pb-2 pl-3.5">
+					<span className={`text-xs ${error ? "text-danger" : "text-ink-3"}`} role={error ? "alert" : undefined}>
+						{error ?? (target ? `${sendKey} to send` : "The agent will ask here when it needs you")}
+					</span>
+					<button
+						type="submit"
+						aria-label="Send answer"
+						disabled={!target || !draft.trim() || saving}
+						className="pressable flex size-8 shrink-0 items-center justify-center rounded-full bg-solid text-on-solid hover:bg-solid-hover disabled:bg-fill-press disabled:text-ink-4"
+					>
+						<ArrowUp size={16} strokeWidth={2} aria-hidden />
+					</button>
+				</div>
+			</div>
+		</form>
+	);
+}
+
+type Props = {
+	history: OpenQuestion[];
+	open: OpenQuestion[];
+	onAnswer: (question: OpenQuestion, text: string) => Promise<void>;
+};
+
+export function QuestionsPage({ history, open, onAnswer }: Props) {
+	const agent = useAgentState();
+	const [targetId, setTargetId] = useState<string | null>(null);
+	const scroller = useRef<HTMLDivElement>(null);
+	const target = open.find((question) => question.id === targetId) ?? open[0];
+	const usingAnswers = agent.status === "running" && agent.runLabel === "Using your answers";
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: keep the newest message in view as the thread grows
+	useEffect(() => {
+		const element = scroller.current;
+		if (element) element.scrollTop = element.scrollHeight;
+	}, [history, usingAnswers]);
+
+	return (
+		<section id="agent-panel" aria-label="Questions" className="flex min-h-0 flex-1 flex-col">
+			<PageHeader title="Questions">
+				{open.length > 0 && (
+					<Chip tone="attention">{open.length === 1 ? "1 waiting for you" : `${open.length} waiting for you`}</Chip>
+				)}
+			</PageHeader>
+
+			<div ref={scroller} className="scroll-quiet min-h-0 flex-1 overflow-y-auto">
+				{history.length === 0 ? (
+					<div className="flex h-full flex-col items-center justify-center px-6 text-center">
+						<Avatar />
+						<h2 className="mt-3 text-sm font-semibold">No questions yet</h2>
+						<p className="mt-1 max-w-[44ch] text-ink-3">
+							When the agent needs something only you know, it asks here. Your answers are saved to what it knows about
+							you, so each one is asked once.
+						</p>
+					</div>
+				) : (
+					<ol className="mx-auto flex w-full max-w-[720px] flex-col gap-4 px-6 pt-6 pb-4">
+						<li className="pb-1 text-center text-xs text-ink-3">
+							The agent asks here when it needs something only you know. Each answer is saved, so it is asked once.
+						</li>
+						{history
+							.map((question) => (
+								<AgentMessage
+									key={`q-${question.id}`}
+									question={question}
+									replying={question.id === target?.id}
+									canPick={open.length > 1}
+									onPick={() => setTargetId(question.id)}
+								/>
+							))
+							.flatMap((message, index) =>
+								history[index].answer
+									? [message, <UserMessage key={`a-${history[index].id}`} question={history[index]} />]
+									: [message],
+							)}
+						{usingAnswers && <Working label="Carrying on with your answers" />}
+					</ol>
+				)}
+			</div>
+
+			<Composer open={open} target={target} onPick={setTargetId} onAnswer={onAnswer} />
+		</section>
+	);
+}

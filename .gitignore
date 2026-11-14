@@ -1,0 +1,14 @@
+node_modules
+out
+dist
+.DS_Store
+*.log
+tests/e2e/.tmp
+
+.impeccable/review
+.playwright-mcp
+.impeccable/hook.cache.json
+.vercel
+.env
+.env.*
+!.env.example

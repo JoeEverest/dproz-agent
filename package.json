@@ -1,0 +1,87 @@
+{
+	"name": "dproz-agent",
+	"productName": "Dproz Agent",
+	"version": "0.1.0",
+	"description": "A local background agent that finds jobs and applies to them for you.",
+	"private": true,
+	"type": "module",
+	"main": "./out/main/index.js",
+	"author": "Dproz",
+	"homepage": "https://www.dproz.com",
+	"scripts": {
+		"dev": "electron-vite dev",
+		"build": "electron-vite build",
+		"start": "electron-vite preview",
+		"typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+		"lint": "biome check src tests",
+		"lint:fix": "biome check --write src tests",
+		"test": "vitest run",
+		"test:e2e": "npm run build && node tests/e2e/run.mjs full",
+		"pack": "npm run build && electron-builder --dir",
+		"dist": "npm run build && electron-builder",
+		"test:gallery": "npm run build && node tests/e2e/run.mjs gallery"
+	},
+	"dependencies": {
+		"@anthropic-ai/claude-agent-sdk": "^0.3.325",
+		"@playwright/mcp": "0.0.85",
+		"zod": "^4.6.7"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.6.7",
+		"@fontsource-variable/inter": "^5.3.0",
+		"@fontsource-variable/plus-jakarta-sans": "^5.3.0",
+		"@tailwindcss/vite": "^4.3.5",
+		"@types/node": "^24.0.0",
+		"@types/react": "^19.2.0",
+		"@types/react-dom": "^19.2.0",
+		"@ui-sdk/core": "^0.1.0-beta.1",
+		"@ui-sdk/react": "^0.1.0-beta.1",
+		"@vitejs/plugin-react": "^6.3.0",
+		"electron": "^45.3.2",
+		"electron-builder": "^26.18.0",
+		"electron-vite": "^6.0.0",
+		"lucide-react": "^1.72.0",
+		"react": "^19.3.1",
+		"react-dom": "^19.3.1",
+		"react-markdown": "^10.1.0",
+		"tailwindcss": "^4.3.5",
+		"typescript": "^5.9.0",
+		"vite": "^8.3.8",
+		"vitest": "^5.1.0"
+	},
+	"build": {
+		"appId": "com.dproz.agent",
+		"productName": "Dproz Agent",
+		"artifactName": "Dproz-Agent-${version}-${os}-${arch}.${ext}",
+		"directories": {
+			"output": "dist"
+		},
+		"files": [
+			"out/**",
+			"resources/**",
+			"package.json"
+		],
+		"asarUnpack": [
+			"node_modules/@anthropic-ai/claude-agent-sdk-*/**",
+			"node_modules/@playwright/mcp/**",
+			"node_modules/playwright/**",
+			"node_modules/playwright-core/**"
+		],
+		"mac": {
+			"target": [
+				"dmg"
+			],
+			"identity": "-",
+			"hardenedRuntime": false,
+			"category": "public.app-category.productivity"
+		},
+		"linux": {
+			"target": [
+				"AppImage",
+				"deb"
+			],
+			"category": "Office",
+			"maintainer": "Dproz"
+		}
+	}
+}

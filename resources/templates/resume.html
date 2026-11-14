@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Resume</title>
+<style>
+	@page { size: A4; margin: 16mm 17mm; }
+	* { box-sizing: border-box; }
+	body { margin: 0; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 10.2pt; line-height: 1.42; color: #1c1c1c; }
+	header { border-bottom: 1.2pt solid #1c1c1c; padding-bottom: 8pt; margin-bottom: 10pt; }
+	h1 { margin: 0; font-size: 21pt; letter-spacing: -0.2pt; }
+	.headline { margin: 2pt 0 5pt; font-size: 11pt; color: #3d3d3d; }
+	.contact { margin: 0; font-size: 9.2pt; color: #3d3d3d; }
+	.contact span + span::before { content: "  ·  "; }
+	h2 { margin: 12pt 0 5pt; font-size: 9.2pt; letter-spacing: 1.1pt; text-transform: uppercase; color: #1c1c1c; }
+	p { margin: 0 0 5pt; }
+	.role { margin-bottom: 8pt; break-inside: avoid; }
+	.role-head { display: flex; justify-content: space-between; gap: 12pt; align-items: baseline; }
+	.role-title { font-weight: 700; }
+	.role-meta { font-size: 9.2pt; color: #4a4a4a; white-space: nowrap; }
+	.role-org { color: #3d3d3d; }
+	ul { margin: 3pt 0 0; padding-left: 13pt; }
+	li { margin-bottom: 2pt; }
+	.skills { display: grid; grid-template-columns: 96pt 1fr; row-gap: 3pt; }
+	.skills dt { font-weight: 700; }
+	.skills dd { margin: 0; }
+</style>
+</head>
+<body>
+	<header>
+		<h1>Full Name</h1>
+		<p class="headline">Target role headline that matches this job</p>
+		<p class="contact"><span>City, Country</span><span>+255 000 000 000</span><span>name@example.com</span><span>linkedin.com/in/name</span></p>
+	</header>
+
+	<h2>Profile</h2>
+	<p>Three lines at most. Lead with the experience this employer cares about most, in their vocabulary.</p>
+
+	<h2>Experience</h2>
+	<div class="role">
+		<div class="role-head">
+			<span><span class="role-title">Job title</span> <span class="role-org">· Company, City</span></span>
+			<span class="role-meta">Jan 2022 – Present</span>
+		</div>
+		<ul>
+			<li>Outcome first, with a number, then how it was done.</li>
+			<li>Keep the bullets that match this job; cut the rest.</li>
+		</ul>
+	</div>
+
+	<h2>Education</h2>
+	<div class="role">
+		<div class="role-head">
+			<span><span class="role-title">Qualification</span> <span class="role-org">· Institution</span></span>
+			<span class="role-meta">2018</span>
+		</div>
+	</div>
+
+	<h2>Skills</h2>
+	<dl class="skills">
+		<dt>Category</dt><dd>Skill, skill, skill</dd>
+	</dl>
+</body>
+</html>

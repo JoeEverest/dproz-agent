@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Dproz Agent</title>
+		<meta
+			name="description"
+			content="A desktop agent that finds jobs and applies to them for you. Give it your resume once and it does the rest."
+		/>
+		<meta name="color-scheme" content="light dark" />
+		<link rel="icon" href="assets/logo-light.svg" />
+		<link rel="preload" href="assets/inter.woff2" as="font" type="font/woff2" crossorigin />
+		<style>
+			@font-face {
+				font-family: "Inter";
+				font-style: normal;
+				font-weight: 100 900;
+				font-display: swap;
+				src: url("assets/inter.woff2") format("woff2");
+			}
+
+			:root {
+				color-scheme: light dark;
+				--canvas: #f4f5f6;
+				--surface: #ffffff;
+				--ink: #1b1d22;
+				--ink-2: #484e5c;
+				--ink-3: #666e7e;
+				--line: #e4e6ea;
+				--solid: #0069cb;
+				--solid-hover: #00509d;
+				--on-solid: #ffffff;
+				--accent-ink: #00509d;
+				--fill: #edeef1;
+				--shot-shadow: 0 30px 60px -30px rgb(18 19 22 / 28%), 0 0 0 1px #dcdfe4;
+			}
+
+			@media (prefers-color-scheme: dark) {
+				:root {
+					--canvas: #151618;
+					--surface: #1a1b1e;
+					--ink: #eceef1;
+					--ink-2: #b9bdc6;
+					--ink-3: #9197a3;
+					--line: #2b2d32;
+					--solid: #0069cb;
+					--solid-hover: #0073de;
+					--accent-ink: #8cc7ff;
+					--fill: #26282c;
+					--shot-shadow: 0 30px 60px -30px rgb(0 0 0 / 70%), 0 0 0 1px #2e3035;
+				}
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+
+			body {
+				margin: 0;
+				background: var(--canvas);
+				color: var(--ink);
+				font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+				font-size: 15px;
+				line-height: 1.55;
+				-webkit-font-smoothing: antialiased;
+			}
+
+			a {
+				color: var(--accent-ink);
+				text-underline-offset: 3px;
+			}
+
+			:focus-visible {
+				outline: 2px solid var(--solid);
+				outline-offset: 2px;
+			}
+
+			.wrap {
+				width: 100%;
+				max-width: 1080px;
+				margin: 0 auto;
+				padding: 0 24px;
+			}
+
+			header {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				height: 72px;
+			}
+
+			.logo {
+				display: block;
+				height: 36px;
+				width: auto;
+			}
+
+			.logo.dark,
+			.shot.dark {
+				display: none;
+			}
+
+			@media (prefers-color-scheme: dark) {
+				.logo.light,
+				.shot.light {
+					display: none;
+				}
+
+				.logo.dark,
+				.shot.dark {
+					display: block;
+				}
+			}
+
+			.button {
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+				gap: 8px;
+				height: 40px;
+				padding: 0 18px;
+				border: 1px solid transparent;
+				border-radius: 8px;
+				background: var(--solid);
+				color: var(--on-solid);
+				font: inherit;
+				font-weight: 500;
+				text-decoration: none;
+				white-space: nowrap;
+				transition:
+					background-color 150ms ease-out,
+					scale 150ms ease-out;
+			}
+
+			.button:active {
+				scale: 0.96;
+			}
+
+			.button.small {
+				height: 32px;
+				padding: 0 12px;
+				font-size: 13px;
+			}
+
+			.button[aria-disabled="true"] {
+				background: var(--fill);
+				color: var(--ink-2);
+				pointer-events: none;
+			}
+
+			@media (hover: hover) {
+				.button:hover {
+					background: var(--solid-hover);
+				}
+			}
+
+			.hero {
+				padding: 56px 0 44px;
+				text-align: center;
+			}
+
+			h1 {
+				max-width: 18ch;
+				margin: 0 auto;
+				font-size: clamp(30px, 5vw, 44px);
+				line-height: 1.1;
+				font-weight: 600;
+				letter-spacing: -0.025em;
+				text-wrap: balance;
+			}
+
+			.lede {
+				max-width: 56ch;
+				margin: 16px auto 0;
+				color: var(--ink-2);
+				font-size: 16px;
+				text-wrap: pretty;
+			}
+
+			.actions {
+				margin-top: 28px;
+			}
+
+			.meta {
+				min-height: 20px;
+				margin: 12px 0 0;
+				color: var(--ink-3);
+				font-size: 13px;
+			}
+
+			.shot {
+				display: block;
+				width: 100%;
+				height: auto;
+				border-radius: 12px;
+			}
+
+			.frame {
+				/* the captures carry their own window shadow, so they sit wider than the text column */
+				margin: 0 -3%;
+			}
+
+			.steps {
+				display: grid;
+				grid-template-columns: repeat(3, 1fr);
+				gap: 40px;
+				margin: 56px 0 0;
+				padding: 0;
+				list-style: none;
+				counter-reset: step;
+			}
+
+			.steps li {
+				counter-increment: step;
+				border-top: 1px solid var(--line);
+				padding-top: 16px;
+			}
+
+			.steps li::before {
+				content: counter(step);
+				color: var(--ink-3);
+				font-size: 13px;
+				font-variant-numeric: tabular-nums;
+			}
+
+			h2 {
+				margin: 6px 0 4px;
+				font-size: 15px;
+				font-weight: 600;
+			}
+
+			.notes > div {
+				min-width: 0;
+			}
+
+			.steps p,
+			.notes p {
+				margin: 0;
+				color: var(--ink-2);
+			}
+
+			.notes {
+				display: grid;
+				grid-template-columns: repeat(2, 1fr);
+				gap: 40px;
+				margin: 64px 0 0;
+				padding: 28px;
+				border: 1px solid var(--line);
+				border-radius: 12px;
+				background: var(--surface);
+			}
+
+			code {
+				display: block;
+				margin-top: 10px;
+				padding: 10px 12px;
+				overflow-x: auto;
+				border-radius: 8px;
+				background: var(--fill);
+				color: var(--ink);
+				font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+				font-size: 13px;
+				white-space: nowrap;
+			}
+
+			footer {
+				margin-top: 64px;
+				padding: 24px 0 40px;
+				border-top: 1px solid var(--line);
+				color: var(--ink-3);
+				font-size: 13px;
+			}
+
+			@media (max-width: 760px) {
+				.steps,
+				.notes {
+					grid-template-columns: 1fr;
+					gap: 24px;
+				}
+
+				.hero {
+					padding-top: 32px;
+				}
+
+				.frame {
+					margin: 0 -24px;
+				}
+			}
+
+			@media (prefers-reduced-motion: reduce) {
+				.button:active {
+					scale: 1;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div class="wrap">
+			<header>
+				<a href="/" aria-label="Dproz Agent">
+					<img class="logo light" src="assets/logo-light.svg" alt="Dproz" width="69" height="36" />
+					<img class="logo dark" src="assets/logo-dark.svg" alt="Dproz" width="69" height="36" />
+				</a>
+				<a class="button small" data-download href="/api/download">Download</a>
+			</header>
+
+			<main>
+				<section class="hero">
+					<h1>An agent that applies to jobs for you</h1>
+					<p class="lede">
+						Give it your resume once. It looks for jobs a few times a day, writes a resume and cover letter for each
+						good match, applies in its own browser, and keeps a board of everything it sent.
+					</p>
+					<div class="actions">
+						<a class="button" data-download data-primary href="/api/download">Download</a>
+						<p class="meta" id="meta" aria-live="polite">Checking for the latest version…</p>
+					</div>
+				</section>
+
+				<div class="frame">
+					<img
+						class="shot light"
+						src="assets/app-light.png"
+						width="2400"
+						height="1617"
+						alt="The Dproz Agent board: jobs it found, the two it is writing applications for right now, and the ones it has sent."
+					/>
+					<img
+						class="shot dark"
+						src="assets/app-dark.png"
+						width="2400"
+						height="1617"
+						alt="The Dproz Agent board: jobs it found, the two it is writing applications for right now, and the ones it has sent."
+					/>
+				</div>
+
+				<ol class="steps">
+					<li>
+						<h2>Hand over your documents</h2>
+						<p>
+							Resume, certificates, references, an old cover letter. It reads them and writes down what it knows about
+							you, which you can correct.
+						</p>
+					</li>
+					<li>
+						<h2>It searches and applies on its own</h2>
+						<p>
+							Every few hours it checks what is new. Each good match gets its own tailored application, judged before
+							it is sent.
+						</p>
+					</li>
+					<li>
+						<h2>You see everything it sent</h2>
+						<p>
+							Every job is a card with the exact documents that went out. When it needs something only you know, it
+							asks once.
+						</p>
+					</li>
+				</ol>
+
+				<section class="notes" aria-label="Before you install">
+					<div>
+						<h2>What you need</h2>
+						<p>
+							A Mac with Apple Silicon, or Linux on x64, and
+							<a href="https://claude.com/claude-code">Claude Code</a> installed and signed in. The agent runs on your
+							own Claude account, and everything it knows about you stays on your computer.
+						</p>
+					</div>
+					<div>
+						<h2>First open on a Mac</h2>
+						<p>The app is not notarised yet, so macOS blocks it. After dragging it to Applications, run this once:</p>
+						<code>xattr -cr "/Applications/Dproz Agent.app"</code>
+					</div>
+				</section>
+			</main>
+
+			<footer>Dproz Agent is an early build from <a href="https://www.dproz.com">Dproz</a>.</footer>
+		</div>
+
+		<script>
+			const platform = /Mac/i.test(navigator.userAgent) ? "mac" : /Linux|X11/i.test(navigator.userAgent) ? "linux" : "";
+			const names = { mac: "macOS", linux: "Linux", deb: "Linux (.deb)" };
+			const details = { mac: "Apple Silicon", linux: "AppImage, x64", deb: "x64" };
+			const megabytes = (bytes) => `${Math.round(bytes / 1048576)} MB`;
+			const meta = document.getElementById("meta");
+			const buttons = document.querySelectorAll("[data-download]");
+
+			const unavailable = (message) => {
+				for (const button of buttons) {
+					button.setAttribute("aria-disabled", "true");
+					button.removeAttribute("href");
+				}
+				meta.textContent = message;
+			};
+
+			fetch("/api/latest")
+				.then((response) => (response.ok ? response.json() : Promise.reject(response.status)))
+				.then((latest) => {
+					const mine = latest.downloads[platform] ? platform : "";
+					const others = Object.keys(latest.downloads).filter((key) => key !== mine);
+					for (const button of buttons) {
+						if (!mine) {
+							button.href = "#other";
+							continue;
+						}
+						button.href = latest.downloads[mine];
+						if (button.hasAttribute("data-primary")) button.textContent = `Download for ${names[mine]}`;
+					}
+					meta.replaceChildren();
+					const lead = mine
+						? `Version ${latest.version} · ${details[mine]} · ${megabytes(latest.files[mine].size)}`
+						: `Version ${latest.version} · for macOS and Linux`;
+					meta.append(lead);
+					if (others.length) {
+						meta.id = "other";
+						meta.append(mine ? " · also for " : " · ");
+						others.forEach((key, index) => {
+							const link = document.createElement("a");
+							link.href = latest.downloads[key];
+							link.textContent = names[key];
+							meta.append(link, index < others.length - 1 ? ", " : "");
+						});
+					}
+				})
+				.catch((status) =>
+					unavailable(status === 404 ? "The first release is on its way." : "Downloads are unavailable right now."),
+				);
+		</script>
+	</body>
+</html>

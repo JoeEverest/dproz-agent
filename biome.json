@@ -1,0 +1,7 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.6.7/schema.json",
+	"files": { "includes": ["src/**", "tests/**", "*.ts", "*.json", "!tests/e2e/.tmp/**", "!src/renderer/src/assets/**"] },
+	"formatter": { "indentStyle": "tab", "lineWidth": 120 },
+	"linter": { "enabled": true, "rules": { "recommended": true } },
+	"css": { "parser": { "tailwindDirectives": true } }
+}
