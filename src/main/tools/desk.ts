@@ -6,8 +6,10 @@ import {
 	documentSchema,
 	emailDraftSchema,
 	fitSchema,
+	REQUIREMENT_KINDS,
 	unansweredQuestions,
 } from "@shared/application";
+import { RESUME_SECTIONS, RESUME_TEMPLATE_IDS, RESUME_TEMPLATES, resumeSchema } from "@shared/resume";
 import { z } from "zod";
 import {
 	applicationFolder,
@@ -16,15 +18,18 @@ import {
 	collectUndeliveredAnswers,
 	createApplication,
 	getApplication,
+	knownFact,
 	listApplications,
 	patchApplication,
 } from "../applications";
 import { findCredential, listCredentials, saveCredential } from "../credentials";
-import { exists } from "../files";
+import { exists, readJson, readText, writeJson } from "../files";
 import { requestHelp } from "../help";
 import { notify } from "../notify";
-import { renderPdf } from "../pdf";
-import { resolveInWorkspace } from "../workspace";
+import { renderHtmlToPdf, renderPdf } from "../pdf";
+import { renderResume } from "../resume/render";
+import { reviewResume } from "../resume/review";
+import { resolveInWorkspace, workspacePaths } from "../workspace";
 import { guarded } from "./result";
 
 const applicationFields = {
@@ -64,6 +69,12 @@ async function missingDocuments(id: string, documents: { file: string }[]) {
 		documents.map(async ({ file }) => ((await exists(path.join(folder, file))) ? null : file)),
 	);
 	return checks.filter((file) => file !== null);
+}
+
+/** Everything the user has told the agent in their own words: about-me.md and their answers. */
+async function userSaid() {
+	const { aboutMe, facts } = await workspacePaths();
+	return [await readText(aboutMe), await readText(facts)].join("\n");
 }
 
 export const deskServer = () =>
@@ -139,7 +150,13 @@ export const deskServer = () =>
 			),
 			tool(
 				"ask_user",
-				"Ask the user for something only they know. Does not wait: the question is queued, the card moves to Needs your input, and you carry on with other work. Answers arrive through get_answers. Ask every question you have for a card in one call.",
+				`Ask the user for something only they know. Does not wait: the question is queued, the card moves to Needs your input, and you carry on with other work. Answers arrive through get_answers. Ask every question you have for a card in one call.
+
+Two kinds of question:
+- A quick question asks whether they have one thing a job requires that nothing they have given you settles. Set item. They answer "I have it" or "Not yet" with one click, so ask these freely: it is how you learn what may go on their resume. Add followUp to learn, only when they have it, where they used it and what came of it.
+- An open question is anything else. Set question, and they answer in a line or two.
+
+Every answer is kept in facts.json. A quick question the user has answered before is not asked again: you get their earlier answer back instead.`,
 				{
 					applicationId: z
 						.string()
@@ -148,19 +165,48 @@ export const deskServer = () =>
 					questions: z
 						.array(
 							z.object({
-								question: z.string().describe("One specific question the user can answer in a line or two."),
+								question: z
+									.string()
+									.optional()
+									.describe("An open question the user can answer in a line or two. Leave out for a quick question."),
+								item: z
+									.string()
+									.optional()
+									.describe(
+										"Makes this a quick question. One requirement as a short label that reads naturally after 'Do you have this:', about 12 words at most: 'At least 3 years of Python', 'Bachelor's degree in Accounting, Finance or a related field', 'Power BI', 'A valid driving licence'. Keep alternatives together in one item, state years as a minimum, and ask about the requirement as the job means it, in plain words rather than the posting's sentence. Not a personal quality (teamwork, honesty) and not something a form will ask anyway.",
+									),
+								category: z.enum(REQUIREMENT_KINDS).optional().describe("What kind of requirement the item is."),
+								followUp: z
+									.string()
+									.optional()
+									.describe(
+										"For a quick question, asked only if they have it: where they used it and what came of it, worded for this item. 'Where did you use Power BI, and what did the reports change?'",
+									),
 								why: z.string().optional().describe("What the answer unblocks."),
 							}),
 						)
 						.min(1),
 				},
 				guarded(async ({ applicationId, questions }) => {
-					if (applicationId) await askApplicationQuestions(applicationId, questions);
-					else {
-						await askInboxQuestions(questions);
-						notify("A question for you", questions[0].question);
+					const known: string[] = [];
+					const fresh: typeof questions = [];
+					for (const question of questions) {
+						if (!question.item && !question.question?.trim()) throw new Error("Each question needs question or item.");
+						const fact = question.item ? await knownFact(question.item) : undefined;
+						if (fact) known.push(`${question.item}: ${fact.answer}`);
+						else fresh.push(question);
 					}
-					return "Queued. Continue with other work; call get_answers later to pick up the reply.";
+					if (fresh.length && applicationId) await askApplicationQuestions(applicationId, fresh);
+					else if (fresh.length) {
+						await askInboxQuestions(fresh);
+						notify("A question for you", fresh[0].question ?? `Do you have this: ${fresh[0].item}?`);
+					}
+					const already = known.length
+						? ` Already answered before, so not asked again:\n${known.map((line) => `- ${line}`).join("\n")}`
+						: "";
+					return fresh.length
+						? `Queued ${fresh.length}. Continue with other work; call get_answers later to pick up the reply.${already}`
+						: `Nothing was asked.${already}`;
 				}),
 			),
 			tool(
@@ -217,8 +263,68 @@ export const deskServer = () =>
 				}),
 			),
 			tool(
+				"save_master_resume",
+				"Save the user's master resume: their whole history as structured content, written to the resume standard, with nothing aimed at one job. Every application's resume is tailored from it, so keep it complete and current: save it again whenever the user tells you something that belongs on it. Kept as master-resume.json in the workspace. Returns notes on the wording, to fix and save again.",
+				{ resume: resumeSchema },
+				guarded(async ({ resume }) => {
+					const { masterResume } = await workspacePaths();
+					await writeJson(masterResume, resume);
+					const notes = reviewResume(resume, { aboutMe: await userSaid() });
+					return { saved: masterResume, notes: notes.length ? notes : "Nothing to fix in the wording." };
+				}),
+			),
+			tool(
+				"render_resume",
+				`Print a tailored resume from structured content, in one of five layouts, to a PDF. The content is also saved as resume.json beside the PDF, so to revise: read resume.json, change it, and call this again with the whole resume. Returns the page count and notes on the wording, checked against the master resume, about-me.md and the posting in job.md. Fix every note and render again, unless a note is plainly mistaken about this resume. Then read the PDF to check how it looks.
+
+Layouts:
+${Object.entries(RESUME_TEMPLATES)
+	.map(([id, use]) => `- ${id}: ${use}`)
+	.join("\n")}
+
+Lists are Markdown text with one "- " line for each item. Wrap a few words in **two asterisks** for bold, for example a project's name at the start of its line. Leave out any section that has nothing in it.`,
+				{
+					pdf: z
+						.string()
+						.describe("Where to save it, relative to the workspace: applications/<id>/Firstname-Lastname-Resume.pdf."),
+					template: z.enum(RESUME_TEMPLATE_IDS).describe("The layout this employer would expect."),
+					sectionOrder: z
+						.array(z.enum(RESUME_SECTIONS))
+						.optional()
+						.describe(
+							"Sections in order of importance for this job. The default is summary, skills, experience, education, then the rest. Sections you leave out follow in that order.",
+						),
+					resume: resumeSchema,
+				},
+				guarded(async ({ pdf, template, sectionOrder, resume }) => {
+					const target = await resolveInWorkspace(pdf);
+					const folder = path.dirname(target);
+					const { pages } = await renderHtmlToPdf(renderResume(resume, { template, sectionOrder }), target);
+					const json = path.join(folder, "resume.json");
+					await writeJson(json, resume);
+
+					const { masterResume } = await workspacePaths();
+					const card = await getApplication(path.basename(folder)).catch(() => null);
+					const master = resumeSchema.safeParse(await readJson<unknown>(masterResume, null));
+					const notes = reviewResume(resume, {
+						master: master.success ? master.data : undefined,
+						aboutMe: await userSaid(),
+						job: await readText(path.join(folder, "job.md")),
+						company: card?.company,
+						jobTitle: card?.title,
+					});
+					if (pages > 2) notes.unshift(`It runs to ${pages} pages. Two at most: cut what matters least for this job.`);
+					if (pages === 2) {
+						notes.push(
+							"It runs to two pages. Right for a long career. If the second page holds only a few lines, bring it back to one: cut the least relevant lines, or use the compact layout.",
+						);
+					}
+					return { pdf: target, json, pages, notes: notes.length ? notes : "Nothing to fix in the wording." };
+				}),
+			),
+			tool(
 				"render_pdf",
-				"Print an HTML file in the workspace to a PDF next to it (A4 unless the HTML sets @page). Returns the page count: read the PDF to check the layout before you use it.",
+				"Print an HTML file in the workspace to a PDF next to it (A4 unless the HTML sets @page). For the cover letter and anything else that is not the resume. Returns the page count: read the PDF to check the layout before you use it.",
 				{
 					html: z.string().describe("HTML file, relative to the workspace or absolute inside it."),
 					pdf: z.string().optional().describe("Output path. Defaults to the HTML path with a .pdf extension."),

@@ -51,7 +51,7 @@ export async function writePersonaDocuments(directory) {
 }
 
 const answers = [
-	[/salary|pay|compensation|remuneration/i, "TZS 2,800,000 gross per month, negotiable."],
+	[/salary|\bpay\b|compensation|remuneration/i, "TZS 2,800,000 gross per month, negotiable."],
 	[/licen[cs]e|driv/i, "Yes, I hold a valid class B driving licence, valid until 2029."],
 	[/relocat/i, "I already live in Arusha and I am happy to stay here. Open to Dar es Salaam for the right role."],
 	[/notice|start|availab/i, "One month's notice. I can start 30 days after an offer."],
@@ -68,6 +68,19 @@ const answers = [
 		/role|position|looking for|target|kind of (job|work)/i,
 		"Finance Officer, Accountant or Senior Accountant roles in manufacturing or FMCG.",
 	],
+	// Results of the work on the CV, for when the agent asks what came of it.
+	[
+		/engagement|fieldwork|finding|audit client/i,
+		"Six engagements over two years, for manufacturers and NGOs with revenue up to TZS 18 billion. On one, my stock count found TZS 42 million of obsolete inventory that was then written off.",
+	],
+	[
+		/management accounts|accounts pack/i,
+		"The pack goes to the finance manager and four department heads by the 6th working day each month. Before I built it, it took until the 12th.",
+	],
+	[
+		/month-end|close|reconcil|variance|stock count|supplier|still current|figures|came of|how many|how much/i,
+		"Month-end close went from 9 working days to 5. I reconcile 14 bank accounts and about 220 supplier accounts. Stock variance fell from 4.1% to 1.3%. The finance team is five people and I report to the finance manager.",
+	],
 	[/location|where|remote|city|region/i, "Arusha first, Dar es Salaam second. On-site is fine."],
 	[/authori[sz]|citizen|permit|nationality/i, "I am a Tanzanian citizen, so I need no work permit."],
 	[/linkedin|portfolio|website/i, "I do not have a LinkedIn profile or website."],
@@ -76,3 +89,11 @@ const answers = [
 export const answerFor = (question) =>
 	answers.find(([pattern]) => pattern.test(question))?.[1] ??
 	"No strong preference. Use your judgement and what my CV says.";
+
+// What the persona truthfully has, for the one-click questions. Her CPA is at intermediate level only.
+const LACKS =
+	/cpa|acca|master|mba|sap|oracle|power bi|erp implementation|ifrs|team of|supervis|manag(ed|ing) (a team|staff)/i;
+const HAS =
+	/excel|power query|pivot|sage|quickbooks|tally|vat|paye|sdl|tax|audit|reconcil|month[- ]end|management accounts|inventory|stock|creditor|payable|bachelor|degree|commerce|accounting|accountant|finance|english|swahili|driving|licen[cs]e|manufactur|food|fmcg|years/i;
+
+export const hasItem = (item) => !LACKS.test(item) && HAS.test(item);

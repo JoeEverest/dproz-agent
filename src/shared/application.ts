@@ -22,10 +22,28 @@ export const STATUS_LABELS: Record<ApplicationStatus, string> = {
 	closed: "Closed",
 };
 
+/** What a quick question can be about: the four kinds of requirement Dproz Fit Check assesses. */
+export const REQUIREMENT_KINDS = ["experience", "skills", "education", "certifications"] as const;
+
+export type RequirementKind = (typeof REQUIREMENT_KINDS)[number];
+
+export const REQUIREMENT_LABELS: Record<RequirementKind, string> = {
+	experience: "Work experience",
+	skills: "Skills",
+	education: "Education",
+	certifications: "Certifications",
+};
+
 export const questionSchema = z.object({
 	id: z.string(),
 	question: z.string(),
 	why: z.string().optional(),
+	// A quick question asks whether the user has one thing a job requires. They answer with one click,
+	// and only when they have it are they asked the follow-up.
+	item: z.string().optional(),
+	category: z.enum(REQUIREMENT_KINDS).optional(),
+	followUp: z.string().optional(),
+	have: z.boolean().optional(),
 	answer: z.string().optional(),
 	askedAt: z.string(),
 	answeredAt: z.string().optional(),
@@ -90,3 +108,23 @@ export type EmailDraft = z.infer<typeof emailDraftSchema>;
 export type Application = z.infer<typeof applicationSchema>;
 
 export const unansweredQuestions = (questions: Question[]) => questions.filter((question) => !question.answer);
+
+/** A click on "I have it" or "Not yet", or an answer in the user's own words. */
+export type QuestionReply = string | { have: boolean };
+
+/** A quick question that still needs its one-click answer. */
+export const awaitingChoice = (question: Question) =>
+	Boolean(question.item) && question.have === undefined && !question.answer;
+
+/** Something the user has told the agent, kept so it is never asked again. */
+export const factSchema = z.object({
+	at: z.string(),
+	question: z.string(),
+	answer: z.string(),
+	item: z.string().optional(),
+	category: z.enum(REQUIREMENT_KINDS).optional(),
+	have: z.boolean().optional(),
+	about: z.string().optional(),
+});
+
+export type Fact = z.infer<typeof factSchema>;

@@ -1,4 +1,4 @@
-import type { Question } from "@shared/application";
+import type { Question, QuestionReply } from "@shared/application";
 import { useCallback, useEffect, useState } from "react";
 import { useDeskEvent } from "./hooks";
 
@@ -25,9 +25,9 @@ export function useOpenQuestions() {
 	useDeskEvent("applications:changed", () => void refresh());
 
 	const answer = useCallback(
-		async (question: OpenQuestion, text: string) => {
-			if (question.about) await window.desk.applications.answer(question.about.id, question.id, text);
-			else await window.desk.inbox.answer(question.id, text);
+		async (question: OpenQuestion, reply: QuestionReply) => {
+			if (question.about) await window.desk.applications.answer(question.about.id, question.id, reply);
+			else await window.desk.inbox.answer(question.id, reply);
 			await refresh();
 		},
 		[refresh],

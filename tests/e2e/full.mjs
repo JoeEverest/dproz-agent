@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { answerFor, writePersonaDocuments } from "./fixtures.mjs";
+import { answerFor, hasItem, writePersonaDocuments } from "./fixtures.mjs";
 import { createSandbox, launchApp, shot, snapshotApp } from "./harness.mjs";
 import { startMockAts } from "./mock-ats.mjs";
 
@@ -35,6 +35,7 @@ const applications = () => window.evaluate(() => window.desk.applications.list()
 const readWorkspace = (file) => fs.readFile(path.join(sandbox.workspace, file), "utf8").catch(() => "");
 let handOffs = 0;
 let liveCards = 0;
+let quickAnswers = 0;
 
 async function attend() {
 	const banner = window.getByRole("alert").filter({ hasText: "needs you in its browser" });
@@ -50,7 +51,19 @@ async function attend() {
 	const waiting = await nav(/^Questions \(\d+\)$/).count();
 	if (waiting) await nav(/^Questions/).click();
 	const box = window.locator("#agent-panel textarea[placeholder='Your answer']");
-	while (await box.count()) {
+	// A quick question is a requirement with two buttons; anything else is typed.
+	const choice = window.locator("#agent-panel form fieldset");
+	while ((await box.count()) || (await choice.count())) {
+		if (await choice.count()) {
+			const item = await choice.locator("legend span").last().textContent();
+			const has = hasItem(item ?? "");
+			log("quick question:", item, "→", has ? "I have it" : "Not yet");
+			if (!quickAnswers) await shot(window, "quick-question");
+			quickAnswers++;
+			await choice.getByRole("button", { name: has ? /^I have it/ : /^Not yet/ }).click();
+			await sleep(900);
+			continue;
+		}
 		const question = await box.getAttribute("aria-label");
 		const answer = answerFor(question ?? "");
 		log("answering:", question, "→", answer);
@@ -169,6 +182,35 @@ try {
 		const files = await fs.readdir(folder);
 		log("application folder:", files.join(", "));
 		check("the posting was saved", files.includes("job.md"));
+		const tailored = JSON.parse(await fs.readFile(path.join(folder, "resume.json"), "utf8").catch(() => "null"));
+		const bullets = (tailored?.workExperience ?? []).flatMap((job) =>
+			(job.highlights ?? "")
+				.split("\n")
+				.filter((line) => /^\s*[-*•]\s/.test(line))
+				.map((line) => line.replace(/^\s*[-*•]\s+/, "")),
+		);
+		log(`resume summary: ${tailored?.summary}`);
+		log(`resume skills: ${tailored?.skills}`);
+		for (const bullet of bullets) log("  •", bullet);
+		check(
+			"the resume was printed from structured content, with no stray HTML",
+			bullets.length >= 4 && !files.some((file) => /resume.*\.html$/i.test(file)),
+			`${bullets.length} bullets`,
+		);
+		const written = [tailored?.summary ?? "", ...bullets];
+		check(
+			"the resume is not in the first person and names no duties",
+			!written.some((line) => /\b(I|my|we|our)\b/.test(line) || /^(responsible for|helped|worked on)/i.test(line)),
+		);
+		check(
+			"every bullet is a line or two",
+			bullets.every((bullet) => bullet.length <= 200),
+			`longest ${Math.max(0, ...bullets.map((bullet) => bullet.length))} characters`,
+		);
+		check(
+			"the resume carries the user's own figures",
+			/1\.3\s?%/.test(written.join(" ")) || /9 (working )?days/.test(written.join(" ")),
+		);
 		const listed = await Promise.all(
 			applied.documents.map((document) =>
 				fs.access(path.join(folder, document.file)).then(
@@ -183,6 +225,19 @@ try {
 			applied.documents.map((document) => document.file).join(", "),
 		);
 	}
+	const master = JSON.parse(await readWorkspace("master-resume.json").then((text) => text || "null"));
+	check(
+		"the master resume was saved from the user's documents",
+		master?.contact?.lastName === "Kisanga" && (master.workExperience ?? []).length >= 2,
+		`${(master?.workExperience ?? []).length} jobs`,
+	);
+	const facts = JSON.parse((await readWorkspace("facts.json")) || "[]");
+	log(`quick questions answered: ${quickAnswers}; facts kept: ${facts.length}`);
+	check(
+		"every answer was kept as a fact",
+		facts.length >= 4 && facts.every((fact) => fact.answer),
+		`${facts.length} facts`,
+	);
 	const logins = await window.evaluate(() => window.desk.credentials.list());
 	check(
 		"the portal account it created was saved to logins",

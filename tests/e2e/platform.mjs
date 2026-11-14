@@ -156,10 +156,101 @@ try {
 	const answered = JSON.parse(await fs.readFile(path.join(folder, "application.json"), "utf8"));
 	check("an answer given in the panel is saved to the card", answered.questions[0].answer === "Yes, class B");
 
+	// Quick questions: a requirement, answered with one click, then the follow-up for what they have.
+	const quick = (id, item, category, followUp) => ({
+		id,
+		question: `Do you have this: ${item}?`,
+		item,
+		category,
+		followUp,
+		askedAt: now,
+	});
+	await fs.writeFile(
+		path.join(folder, "application.json"),
+		JSON.stringify({
+			...answered,
+			questions: [
+				...answered.questions,
+				quick("q2", "Power BI", "skills", "Where did you use Power BI, and what did the reports change?"),
+				quick("q3", "CPA(T) or an equivalent qualification", "certifications"),
+			],
+		}),
+	);
+	const second = path.join(sandbox.workspace, "applications", "beta-analyst");
+	await fs.mkdir(second, { recursive: true });
+	await fs.writeFile(
+		path.join(second, "application.json"),
+		JSON.stringify({
+			id: "beta-analyst",
+			title: "Finance Analyst",
+			company: "Beta",
+			status: "needs_input",
+			source: "web",
+			applyMethod: "url",
+			questions: [quick("q4", "power-bi", "skills")],
+			timeline: [{ at: now, event: "Found" }],
+			createdAt: now,
+			updatedAt: now,
+		}),
+	);
+	await window.getByText("3 waiting for you").waitFor({ timeout: 10_000 });
+	const choice = window.locator("#agent-panel form fieldset");
+	await choice.getByText("Power BI", { exact: true }).waitFor({ timeout: 10_000 });
+	check(
+		"a quick question is asked with two answers, before anything that needs typing",
+		(await answerBox.count()) === 0,
+	);
+	await shot(window, `platform-${process.platform}-quick-question`);
+	await choice.getByRole("button", { name: /^I have it/ }).click();
+	await choice.getByText("CPA(T) or an equivalent qualification").waitFor({ timeout: 10_000 });
+	check("one click answers it and moves to the next quick question", true);
+	await choice.getByRole("button", { name: /^Not yet/ }).click();
+	await answerBox.waitFor({ timeout: 10_000 });
+	check(
+		"what the user has is followed up with a deeper question",
+		(await answerBox.getAttribute("aria-label")) === "Where did you use Power BI, and what did the reports change?",
+	);
+	await shot(window, `platform-${process.platform}-follow-up`);
+	await answerBox.fill("At Acme, for the monthly sales reports. Reporting went from 3 days to 1.");
+	await answerBox.press("ControlOrMeta+Enter");
+	await window.waitForTimeout(1200);
+	const triaged = JSON.parse(await fs.readFile(path.join(folder, "application.json"), "utf8")).questions;
+	const elsewhere = JSON.parse(await fs.readFile(path.join(second, "application.json"), "utf8")).questions[0];
+	check(
+		"the answers are saved to the card",
+		triaged[1].have === true && triaged[1].answer.startsWith("I have it. At Acme") && triaged[2].have === false,
+		`${triaged[1].answer} / ${triaged[2].answer}`,
+	);
+	check(
+		"the same requirement on another job is answered without asking again",
+		elsewhere.have === true && elsewhere.answer === "I have it.",
+		elsewhere.answer,
+	);
+	const facts = JSON.parse(await fs.readFile(path.join(sandbox.workspace, "facts.json"), "utf8"));
+	check(
+		"every answer is kept as a fact",
+		facts.some((fact) => fact.item === "Power BI" && fact.have && /3 days to 1/.test(fact.answer)) &&
+			facts.some((fact) => /CPA/.test(fact.item ?? "") && fact.have === false) &&
+			facts.some((fact) => fact.answer === "Yes, class B"),
+		`${facts.length} facts`,
+	);
+	await shot(window, `platform-${process.platform}-answered`);
+	const withOneMore = JSON.parse(await fs.readFile(path.join(folder, "application.json"), "utf8"));
+	withOneMore.questions.push(quick("q5", "SAP", "skills"));
+	await fs.writeFile(path.join(folder, "application.json"), JSON.stringify(withOneMore));
+
 	await nav("Jobs").click();
 	await window.getByRole("button", { name: /Accountant/ }).click();
 	const drawer = window.getByRole("dialog");
 	await drawer.waitFor();
+	const onCard = drawer.locator("fieldset");
+	await onCard.getByText("SAP", { exact: true }).waitFor({ timeout: 10_000 });
+	await onCard.scrollIntoViewIfNeeded();
+	await shot(window, `platform-${process.platform}-card-question`);
+	await onCard.getByRole("button", { name: /^Not yet/ }).click();
+	await window.waitForTimeout(1000);
+	const fromCard = JSON.parse(await fs.readFile(path.join(folder, "application.json"), "utf8")).questions.at(-1);
+	check("a quick question can be answered on the card too", fromCard.have === false, fromCard.answer);
 	const resumeRow = drawer.getByRole("button", { name: /^Preview Resume/ });
 	check("the card shows its documents", (await resumeRow.count()) === 1);
 	await resumeRow.click();

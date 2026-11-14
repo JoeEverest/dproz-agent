@@ -9,6 +9,9 @@ export async function readJson<T>(file: string, fallback: T): Promise<T> {
 	}
 }
 
+/** A text file's contents, or nothing when it is not there. */
+export const readText = (file: string) => fs.readFile(file, "utf8").catch(() => "");
+
 export async function writeFileAtomic(file: string, content: string | Uint8Array) {
 	await fs.mkdir(path.dirname(file), { recursive: true });
 	const temporary = `${file}.${process.pid}.${Date.now()}.tmp`;

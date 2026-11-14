@@ -31,13 +31,25 @@ First launch is a setup screen: add your documents, and it checks the Claude sig
 
 The main screen is the board. Nothing has to be asked for:
 
-- After setup the agent reads your documents and writes `about-me.md`, its memory of who you are.
+- After setup the agent reads your documents and writes `about-me.md`, its memory of who you are, and your master resume: your whole history, rewritten to the resume standard below. Every application's resume is tailored from it.
 - A source can also be a link, pasted where documents are added. A link to a file (a resume PDF, a Google Doc or Drive file shared with anyone who has the link) is downloaded and becomes a document. A link to a page (a portfolio, a profile) is kept as a link, and the agent reads the page itself, in its browser when the page needs a sign-in.
 - It then searches Dproz on a timer (every 6 hours by default; 4 hours, twice a day and daily are the other choices), looking at jobs posted since the last search. There is no cap: every real fit is pursued.
-- When it needs something only you know, the question appears on the Questions screen, as a chat. Your answer is saved to `about-me.md`, so it is asked once, and the job that was waiting carries on.
+- When it needs something only you know, the question appears on the Questions screen, as a chat. A requirement a job asks for that nothing you have given it shows is a quick question: **I have it** or **Not yet**, one click, as in Dproz Fit Check. Quick questions come first. What you have is then followed up with a deeper question (where you used it, what came of it), which you can skip. Every answer is kept in `facts.json`, so it is asked once: the same requirement on another job is answered for you.
 - Each card lists the documents written for that job; clicking one slides a preview out beside the card, with a Download button that saves a copy.
 - **Add a job** takes a link or pasted posting for a job you found yourself, to apply to or only prepare.
 - Pause stops the current run and holds everything until you resume.
+
+### How resumes are written
+
+The writing rules are in `src/main/agent/prompt.ts` and come from two places.
+
+The form comes from the career services that publish their guidance ([Harvard](https://careerservices.fas.harvard.edu/resources/create-a-strong-resume/), [Yale](https://ocs.yale.edu/resources/writing-impactful-resume-bullets/), [MIT](https://capd.mit.edu/resources/resumes-writing-about-your-skills/)). A bullet is one accomplishment: a verb, what you did, and what came of it. That is a STAR answer with the situation and task cut to a few words. It opens with the verb, runs a line or two, uses no "I", and no two bullets in a role open with the same verb. The resume shows requirements through accomplishments and never argues that you meet them.
+
+What may be claimed comes from the Dproz AI service, which tailors resumes for Fit Check. The posting is the employer's wording and the resume is your facts. Keywords go in the skills and the summary, lightly, and only for what you have confirmed. Years, degrees and titles are yours, never the posting's thresholds. What you said you lack is not claimed.
+
+The agent may rewrite the whole resume, because it can ask you for what is missing. When your documents say what you did but not what came of it, it asks.
+
+A resume is structured data in the Dproz AI service's master resume shape (`src/shared/resume.ts`), printed by `render_resume` in one of five layouts ported from Fit Check's resume tailoring: classic, modern, compact, minimal and executive (`src/main/resume/templates`). Each print returns notes on the wording, checked against your master resume, `about-me.md`, your answers and the posting (`src/main/resume/review.ts`): the first person, duties, repeated verbs, long bullets, a figure you never gave, the posting's thresholds or sentences, the job's title or employer in the summary, and skills that are not skills. The writer fixes them before the judge reads it, and the judge holds the resume to the same rules.
 
 ### Agents
 
@@ -46,8 +58,8 @@ Every job is handed to subagents that start with a fresh context (`src/main/agen
 | Agent | Runs | Does |
 | --- | --- | --- |
 | Coordinator | once per run | Searches, screens postings, creates cards, delegates, and never writes or submits itself. |
-| `application-writer` | one per job, in parallel | Saves the posting, checks fit, decides the pitch, tailors the resume and cover letter, renders PDFs. No browser. |
-| `application-judge` | one per prepared job, in parallel | Read-only. Checks every claim against `about-me.md` and reads as the hiring manager. Returns SEND or REVISE (two rounds at most). |
+| `application-writer` | one per job, in parallel | Saves the posting, checks fit requirement by requirement, asks quick questions about what is unknown, decides the pitch, tailors the resume from the master resume and writes the cover letter, renders PDFs. No browser. |
+| `application-judge` | one per prepared job, in parallel | Read-only. Checks every claim against `about-me.md`, reads as the hiring manager, and holds the resume to the writing rules. Returns SEND or REVISE (two rounds at most). |
 | `application-sender` | one at a time | Fills and submits the form in the shared browser, creates and saves a portal account if needed, and marks the card Applied once it has seen a confirmation. |
 
 Email-only jobs are never sent by the agent: the card moves to Apply manually with the documents and a draft message. A CAPTCHA, one-time code or login challenge is handed to you in the agent's browser window.
@@ -68,12 +80,15 @@ Everything is ordinary files in the app's data folder (`workspace/` inside it); 
 
 ```
 about-me.md              what the agent knows about you
+master-resume.json       your whole history as a resume, which each application is tailored from
+facts.json               every answer you have given, including what you have and do not have
 documents/               your originals
 links.json               pages you gave as sources about yourself
-templates/               starting points for the resume and cover letter
+templates/               the starting point for the cover letter
 applications/<id>/       one folder per job
   application.json       the card: status, fit, strategy, documents, questions, history
   job.md                 snapshot of the posting
+  resume.json            the tailored resume as data
   *.pdf                  the documents that were sent
 inbox.json               general questions the agent has asked you
 ```

@@ -1,4 +1,4 @@
-import type { Application, ApplicationStatus, Question } from "./application";
+import type { Application, ApplicationStatus, Question, QuestionReply } from "./application";
 
 export type Settings = {
 	workspaceDir: string;
@@ -158,7 +158,7 @@ export type DeskApi = {
 	applications: {
 		list(): Promise<Application[]>;
 		setStatus(id: string, status: ApplicationStatus): Promise<Application>;
-		answer(id: string, questionId: string, answer: string): Promise<Application>;
+		answer(id: string, questionId: string, reply: QuestionReply): Promise<Application>;
 		remove(id: string): Promise<void>;
 		openFolder(id: string): Promise<void>;
 		openDocument(id: string, file: string): Promise<void>;
@@ -169,7 +169,7 @@ export type DeskApi = {
 	};
 	inbox: {
 		list(): Promise<InboxQuestion[]>;
-		answer(questionId: string, answer: string): Promise<InboxQuestion[]>;
+		answer(questionId: string, reply: QuestionReply): Promise<InboxQuestion[]>;
 	};
 	credentials: {
 		list(): Promise<CredentialSummary[]>;

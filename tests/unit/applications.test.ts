@@ -79,4 +79,54 @@ describe("application store", () => {
 		expect(await store.listApplications()).toHaveLength(1);
 		warn.mockRestore();
 	});
+
+	it("answers a quick question with one click, and follows up only what the user has", async () => {
+		const { application } = await store.createApplication(job);
+		const asked = await store.askApplicationQuestions(application.id, [
+			{ item: "Power BI", category: "skills", followUp: "Where did you use Power BI?" },
+			{ item: "CPA(T) or equivalent", category: "certifications", followUp: "When did you qualify?" },
+			{ question: "What salary do you expect?" },
+		]);
+		const [powerBi, cpa, salary] = asked.questions;
+		expect(powerBi.question).toBe("Do you have this: Power BI?");
+
+		// "I have it" leaves the question open for the follow-up, but is a fact from that moment.
+		let card = await store.answerApplicationQuestion(application.id, powerBi.id, { have: true });
+		expect(card.questions[0].have).toBe(true);
+		expect(card.questions[0].answer).toBeUndefined();
+		expect(await store.knownFact("power-bi")).toMatchObject({ have: true, answer: "I have it." });
+
+		card = await store.answerApplicationQuestion(application.id, powerBi.id, "At Meru Dairies, for sales reports.");
+		expect(card.questions[0].answer).toBe("I have it. At Meru Dairies, for sales reports.");
+		expect((await store.knownFact("Power BI"))?.answer).toBe("I have it. At Meru Dairies, for sales reports.");
+
+		// "Not yet" settles at once, with no follow-up.
+		card = await store.answerApplicationQuestion(application.id, cpa.id, { have: false });
+		expect(card.questions[1]).toMatchObject({ have: false, answer: "I do not have it." });
+
+		card = await store.answerApplicationQuestion(application.id, salary.id, "TZS 2,800,000");
+		expect(card.questions[2].answer).toBe("TZS 2,800,000");
+		expect((await store.listFacts()).map((fact) => fact.answer)).toContain("TZS 2,800,000");
+		expect((await store.collectUndeliveredAnswers()).map((answer) => answer.have)).toEqual([true, false, undefined]);
+	});
+
+	it("answers the same requirement wherever else it is waiting", async () => {
+		const first = await store.createApplication(job);
+		const second = await store.createApplication({ ...job, title: "Accountant", sourceJobId: "def456" });
+		const asked = await store.askApplicationQuestions(first.application.id, [{ item: "Sage 300" }]);
+		await store.askApplicationQuestions(second.application.id, [{ item: "sage 300" }]);
+		await store.askInboxQuestions([{ item: "Sage-300" }, { item: "Tally" }]);
+
+		await store.answerApplicationQuestion(first.application.id, asked.questions[0].id, { have: true });
+
+		expect((await store.getApplication(second.application.id)).questions[0]).toMatchObject({
+			have: true,
+			answer: "I have it.",
+		});
+		const inbox = await store.listInbox();
+		expect(inbox[0].answer).toBe("I have it.");
+		expect(inbox[1].answer).toBeUndefined();
+		// One fact, not three: the copies are the same answer.
+		expect((await store.listFacts()).filter((fact) => store.sameItem(fact.item, "Sage 300"))).toHaveLength(1);
+	});
 });

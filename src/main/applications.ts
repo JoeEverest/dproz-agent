@@ -6,8 +6,12 @@ import {
 	type Application,
 	type ApplicationStatus,
 	applicationSchema,
+	type Fact,
+	factSchema,
 	type Question,
+	type QuestionReply,
 	questionSchema,
+	type RequirementKind,
 	STATUS_LABELS,
 } from "@shared/application";
 import { z } from "zod";
@@ -15,11 +19,24 @@ import { broadcast } from "./events";
 import { exists, readJson, writeJson } from "./files";
 import { ensureWorkspace, workspacePaths } from "./workspace";
 
-export type NewQuestion = { question: string; why?: string };
+export type NewQuestion = {
+	question?: string;
+	why?: string;
+	item?: string;
+	category?: RequirementKind;
+	followUp?: string;
+};
 
 export type ApplicationPatch = Partial<Omit<Application, "id" | "questions" | "timeline" | "createdAt" | "updatedAt">>;
 
-export type AnsweredQuestion = { applicationId?: string; application?: string; question: string; answer: string };
+export type AnsweredQuestion = {
+	applicationId?: string;
+	application?: string;
+	question: string;
+	answer: string;
+	item?: string;
+	have?: boolean;
+};
 
 type StatusListener = (application: Application, previous: ApplicationStatus | null) => void;
 
@@ -144,9 +161,82 @@ export function patchApplication(id: string, patch: ApplicationPatch, note?: str
 }
 
 function toQuestions(questions: NewQuestion[]): Question[] {
-	return questions.map(({ question, why }) =>
-		questionSchema.parse({ id: randomUUID(), question, why, askedAt: now() }),
+	return questions.map(({ question, item, ...rest }) =>
+		questionSchema.parse({
+			...rest,
+			item,
+			id: randomUUID(),
+			question: question?.trim() || `Do you have this: ${item}?`,
+			askedAt: now(),
+		}),
 	);
+}
+
+/** Two wordings of one requirement, compared loosely: "Power BI" and "power-bi" are the same thing. */
+const itemKey = (item: string) =>
+	item
+		.toLowerCase()
+		.replace(/[^a-z0-9+#]+/g, " ")
+		.trim();
+
+export const sameItem = (a?: string, b?: string) => Boolean(a && b) && itemKey(a ?? "") === itemKey(b ?? "");
+
+/**
+ * A question after the user replies. A click on "I have it" leaves a question that has a follow-up
+ * open, so the detail can be given next; every other reply settles it.
+ */
+export function applyReply(question: Question, reply: QuestionReply): Question {
+	const settled = (fields: Partial<Question>) => ({
+		...question,
+		...fields,
+		answeredAt: now(),
+		deliveredAt: undefined,
+	});
+	if (typeof reply !== "string") {
+		if (!reply.have) return settled({ have: false, answer: "I do not have it." });
+		return question.followUp ? { ...question, have: true } : settled({ have: true, answer: "I have it." });
+	}
+	const text = reply.trim();
+	if (question.item && question.have) return settled({ answer: text ? `I have it. ${text}` : "I have it." });
+	return settled({ answer: text });
+}
+
+export async function listFacts(): Promise<Fact[]> {
+	const { facts } = await workspacePaths();
+	return z
+		.array(factSchema)
+		.catch([])
+		.parse(await readJson<unknown>(facts, []));
+}
+
+/** The fact that already settles a quick question, if the user has answered it before. */
+export async function knownFact(item: string) {
+	return (await listFacts()).findLast((fact) => sameItem(fact.item, item));
+}
+
+/**
+ * Keeps a settled answer as a fact, and gives the same answer to the same quick question wherever
+ * else it is waiting, so the user answers a requirement once however many jobs ask for it.
+ */
+async function settle(asked: Question, about?: string) {
+	// "I have it" is a fact from the moment it is clicked, whether or not the follow-up gets an answer.
+	const question = !asked.answer && asked.item && asked.have ? { ...asked, answer: "I have it." } : asked;
+	if (!question.answer) return;
+	const { facts } = await workspacePaths();
+	const { item, category, have, answer } = question;
+	const fact = factSchema.parse({ at: now(), question: question.question, answer, item, category, have, about });
+	await writeJson(facts, [...(await listFacts()), fact]);
+	if (!item) return;
+
+	const waiting = (other: Question) => other.id !== question.id && !other.answer && sameItem(other.item, item);
+	const copy = (other: Question) =>
+		waiting(other) ? { ...other, have, answer, answeredAt: now(), deliveredAt: undefined } : other;
+	const inbox = await listInbox();
+	if (inbox.some(waiting)) await saveInbox(inbox.map(copy));
+	for (const application of await listApplications()) {
+		if (!application.questions.some(waiting)) continue;
+		await persist({ ...application, questions: application.questions.map(copy) }, application.status);
+	}
 }
 
 export function askApplicationQuestions(id: string, questions: NewQuestion[]): Promise<Application> {
@@ -160,13 +250,16 @@ export function askApplicationQuestions(id: string, questions: NewQuestion[]): P
 	});
 }
 
-export function answerApplicationQuestion(id: string, questionId: string, answer: string): Promise<Application> {
+export function answerApplicationQuestion(id: string, questionId: string, reply: QuestionReply): Promise<Application> {
 	return serialized(async () => {
 		const current = await getApplication(id);
 		const questions = current.questions.map((question) =>
-			question.id === questionId ? { ...question, answer, answeredAt: now(), deliveredAt: undefined } : question,
+			question.id === questionId ? applyReply(question, reply) : question,
 		);
-		return persist({ ...current, questions }, current.status);
+		const saved = await persist({ ...current, questions }, current.status);
+		const answered = questions.find((question) => question.id === questionId);
+		if (answered) await settle(answered, `${current.title} at ${current.company}`);
+		return saved;
 	});
 }
 
@@ -194,14 +287,16 @@ export function askInboxQuestions(questions: NewQuestion[]): Promise<Question[]>
 	return serialized(async () => saveInbox([...(await listInbox()), ...toQuestions(questions)]));
 }
 
-export function answerInboxQuestion(questionId: string, answer: string): Promise<Question[]> {
-	return serialized(async () =>
-		saveInbox(
-			(await listInbox()).map((question) =>
-				question.id === questionId ? { ...question, answer, answeredAt: now(), deliveredAt: undefined } : question,
-			),
-		),
-	);
+export function answerInboxQuestion(questionId: string, reply: QuestionReply): Promise<Question[]> {
+	return serialized(async () => {
+		const questions = (await listInbox()).map((question) =>
+			question.id === questionId ? applyReply(question, reply) : question,
+		);
+		await saveInbox(questions);
+		const answered = questions.find((question) => question.id === questionId);
+		if (answered) await settle(answered);
+		return listInbox();
+	});
 }
 
 const awaitingDelivery = (question: Question) => Boolean(question.answer) && !question.deliveredAt;
@@ -219,7 +314,8 @@ export function collectUndeliveredAnswers(): Promise<AnsweredQuestion[]> {
 		const answers: AnsweredQuestion[] = [];
 		const deliver = (question: Question, origin: Pick<AnsweredQuestion, "applicationId" | "application">) => {
 			if (!awaitingDelivery(question)) return question;
-			answers.push({ ...origin, question: question.question, answer: question.answer ?? "" });
+			const { item, have } = question;
+			answers.push({ ...origin, question: question.question, answer: question.answer ?? "", item, have });
 			return { ...question, deliveredAt };
 		};
 

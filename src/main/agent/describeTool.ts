@@ -51,12 +51,17 @@ const describers: Record<string, (input: Input) => string> = {
 		input.id
 			? `Update card ${text(input.id, 50)}${input.status ? ` → ${text(input.status)}` : ""}`
 			: `Add card: ${text(input.title, 50)} at ${text(input.company, 40)}`,
-	ask_user: (input) => `Ask you: ${text((input.questions as { question: string }[] | undefined)?.[0]?.question, 80)}`,
+	ask_user: (input) => {
+		const first = (input.questions as { question?: string; item?: string }[] | undefined)?.[0];
+		return `Ask you: ${text(first?.question ?? (first?.item ? `Do you have this: ${first.item}?` : ""), 80)}`;
+	},
 	get_answers: () => "Check for your answers",
 	get_credentials: (input) => `Get the login for ${host(input.site)}`,
 	save_credentials: (input) => `Save the login for ${host(input.site)}`,
 	request_browser_help: (input) => `Waiting for you: ${text(input.instruction, 80)}`,
 	render_pdf: (input) => `Render ${fileName(input.pdf ?? input.html)}`,
+	render_resume: (input) => `Write ${fileName(input.pdf)}`,
+	save_master_resume: () => "Update your master resume",
 	browser_navigate: (input) => `Open ${host(input.url)}`,
 	browser_navigate_back: () => "Go back",
 	browser_snapshot: () => "Read the page",

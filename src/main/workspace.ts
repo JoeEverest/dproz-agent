@@ -3,13 +3,14 @@ import path from "node:path";
 import type { WorkspaceDocument } from "@shared/ipc";
 import aboutMeTemplate from "../../resources/templates/about-me.md?raw";
 import coverLetterTemplate from "../../resources/templates/cover-letter.html?raw";
-import resumeTemplate from "../../resources/templates/resume.html?raw";
 import { exists, isInside } from "./files";
 import { getSettings } from "./settings";
 
 export type WorkspacePaths = {
 	root: string;
 	aboutMe: string;
+	masterResume: string;
+	facts: string;
 	documents: string;
 	applications: string;
 	templates: string;
@@ -20,6 +21,8 @@ export function pathsFor(root: string): WorkspacePaths {
 	return {
 		root,
 		aboutMe: path.join(root, "about-me.md"),
+		masterResume: path.join(root, "master-resume.json"),
+		facts: path.join(root, "facts.json"),
 		documents: path.join(root, "documents"),
 		applications: path.join(root, "applications"),
 		templates: path.join(root, "templates"),
@@ -39,7 +42,6 @@ export async function ensureWorkspace(): Promise<WorkspacePaths> {
 		await fs.mkdir(directory, { recursive: true });
 	}
 	await writeIfMissing(paths.aboutMe, aboutMeTemplate);
-	await writeIfMissing(path.join(paths.templates, "resume.html"), resumeTemplate);
 	await writeIfMissing(path.join(paths.templates, "cover-letter.html"), coverLetterTemplate);
 	return paths;
 }
