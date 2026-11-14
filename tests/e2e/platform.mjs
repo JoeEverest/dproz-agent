@@ -8,6 +8,25 @@ let latestVersion = "0.0.1";
 const updates = http.createServer((request, response) => {
 	response.setHeader("content-type", "application/json");
 	// Also stands in for the Anthropic API when a key is checked: it refuses exactly one key.
+	// ...and for another endpoint: it refuses one token and does not know one model.
+	if (request.url.startsWith("/v1/messages")) {
+		let body = "";
+		request.on("data", (chunk) => {
+			body += chunk;
+		});
+		request.on("end", () => {
+			const refused =
+				request.headers.authorization === "Bearer refused-token" || request.headers["x-api-key"] === "refused-token";
+			const unknown = JSON.parse(body).model === "no-such-model";
+			response.statusCode = refused ? 401 : unknown ? 404 : 200;
+			response.end(
+				JSON.stringify(
+					unknown ? { error: { message: "model 'no-such-model' not found" } } : { id: "msg_test", content: [] },
+				),
+			);
+		});
+		return;
+	}
 	if (request.url.startsWith("/v1/models")) {
 		const refused = request.headers["x-api-key"] === "sk-ant-refused";
 		response.statusCode = refused ? 401 : 200;
@@ -176,27 +195,64 @@ try {
 		(await window.getByText("Send applications automatically", { exact: true }).count()) === 1,
 	);
 
-	const useKey = window.getByRole("button", { name: "Use an API key instead" });
-	if (await useKey.count()) await useKey.click();
+	const openForm = async () => {
+		const other = window.getByRole("button", { name: "Use something else" });
+		if (await other.count()) await other.click();
+	};
+	await openForm();
 	const keyBox = window.getByRole("textbox", { name: "Anthropic API key" });
 	await keyBox.fill("sk-ant-refused");
 	await window.getByRole("button", { name: "Use this key" }).click();
 	await window.getByText("Anthropic did not accept that key").waitFor({ timeout: 20_000 });
-	check("a key Anthropic refuses is not saved", !(await status()).apiKey.set);
+	check("a key Anthropic refuses is not saved", (await status()).connection.kind === "claude-code");
 	await keyBox.fill("sk-ant-test-key-1234");
 	await window.getByRole("button", { name: "Use this key" }).click();
 	await window.getByText("API key ending in 1234").waitFor({ timeout: 30_000 });
 	const withKey = await status();
 	check(
 		"an accepted key becomes the way the agent signs in",
-		withKey.apiKey.set && withKey.claude.signedIn && withKey.claude.method === "api-key",
+		withKey.connection.kind === "api-key" && withKey.claude.signedIn && withKey.claude.method === "api-key",
 		JSON.stringify(withKey.claude).slice(0, 120),
 	);
-	const keyOnDisk = await fs.readFile(path.join(sandbox.userData, "anthropic.key"));
-	check("the key is never written to disk in clear text", !keyOnDisk.includes("sk-ant-test-key-1234"));
-	await window.getByRole("button", { name: "Remove key" }).click();
+	const sealed = () => fs.readFile(path.join(sandbox.userData, "connection.sealed"));
+	check("the key is never written to disk in clear text", !(await sealed()).includes("sk-ant-test-key-1234"));
+	await window.getByRole("button", { name: "Remove", exact: true }).click();
 	await window.getByText("API key ending in 1234").waitFor({ state: "detached", timeout: 30_000 });
-	check("removing the key goes back to the Claude Code sign-in", !(await status()).apiKey.set);
+	check("removing the key goes back to the Claude Code sign-in", (await status()).connection.kind === "claude-code");
+
+	const endpointUrl = new URL(updateUrl).origin;
+	await openForm();
+	await window.getByRole("radio", { name: "Another endpoint" }).click();
+	await window.getByRole("textbox", { name: "Address" }).fill(`${endpointUrl}/v1/messages`);
+	await window.getByRole("textbox", { name: "Model" }).fill("no-such-model");
+	await window.getByRole("button", { name: "Use this endpoint" }).click();
+	await window.getByText("model 'no-such-model' not found").waitFor({ timeout: 20_000 });
+	check("an endpoint without the named model is not saved", (await status()).connection.kind === "claude-code");
+	await window.getByRole("textbox", { name: "Model" }).fill("open-model:14b");
+	await window.getByRole("textbox", { name: "Token" }).fill("refused-token");
+	await window.getByRole("button", { name: "Use this endpoint" }).click();
+	await window.getByText("did not accept the token").waitFor({ timeout: 20_000 });
+	check("an endpoint that refuses the token is not saved", (await status()).connection.kind === "claude-code");
+	await window.getByRole("textbox", { name: "Token" }).fill("secret-endpoint-token");
+	await window.getByRole("button", { name: "Use this endpoint" }).click();
+	await window.getByText(`open-model:14b at ${endpointUrl}`).waitFor({ timeout: 30_000 });
+	const withEndpoint = await status();
+	check(
+		"a working endpoint is saved with its address tidied and its model",
+		withEndpoint.connection.kind === "custom" &&
+			withEndpoint.connection.baseUrl === endpointUrl &&
+			withEndpoint.connection.model === "open-model:14b" &&
+			withEndpoint.claude.signedIn,
+		JSON.stringify(withEndpoint.connection),
+	);
+	check(
+		"the endpoint's token is never written to disk in clear text",
+		!(await sealed()).includes("secret-endpoint-token"),
+	);
+	await shot(window, `platform-${process.platform}-endpoint`);
+	await window.getByRole("button", { name: "Remove", exact: true }).click();
+	await window.getByText(`open-model:14b at ${endpointUrl}`).waitFor({ state: "detached", timeout: 30_000 });
+	check("removing the endpoint clears it", (await status()).connection.kind === "claude-code");
 
 	const updateIcon = window.getByRole("navigation").getByRole("button", { name: /is available/ });
 	check("no update icon while the installed version is current", (await updateIcon.count()) === 0);

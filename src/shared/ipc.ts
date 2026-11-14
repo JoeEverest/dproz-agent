@@ -12,18 +12,23 @@ export type Settings = {
 export type ClaudeStatus =
 	| {
 			signedIn: true;
-			method: "claude-code" | "api-key";
+			method: ConnectionStatus["kind"];
 			email?: string;
 			subscription?: string;
 			models: { value: string; label: string }[];
 	  }
 	| { signedIn: false; reason: string };
 
-export type ApiKeyStatus = { set: boolean; hint?: string };
+export type ConnectionStatus =
+	| { kind: "claude-code" }
+	| { kind: "api-key"; hint: string }
+	| { kind: "custom"; baseUrl: string; model: string; hasToken: boolean };
+
+export type EndpointInput = { baseUrl: string; model: string; token?: string };
 
 export type SetupStatus = {
 	claude: ClaudeStatus;
-	apiKey: ApiKeyStatus;
+	connection: ConnectionStatus;
 	browserInstalled: boolean;
 	workspaceDir: string;
 	credentialStorage: { encrypted: boolean; backend: string };
@@ -155,7 +160,8 @@ export type DeskApi = {
 	};
 	claude: {
 		setApiKey(key: string): Promise<SetupStatus>;
-		clearApiKey(): Promise<SetupStatus>;
+		setEndpoint(endpoint: EndpointInput): Promise<SetupStatus>;
+		clearConnection(): Promise<SetupStatus>;
 	};
 	updates: {
 		status(): Promise<UpdateInfo>;
@@ -180,7 +186,7 @@ export const DESK_METHODS = {
 	credentials: ["list", "save", "remove"],
 	agent: ["state", "activity", "onboard", "documentsAdded", "setPaused", "stop"],
 	help: ["current", "respond"],
-	claude: ["setApiKey", "clearApiKey"],
+	claude: ["setApiKey", "setEndpoint", "clearConnection"],
 	updates: ["status", "check"],
 	shell: ["openExternal", "open"],
 } as const satisfies { [Area in RemoteAreas]: readonly (keyof DeskApi[Area])[] };

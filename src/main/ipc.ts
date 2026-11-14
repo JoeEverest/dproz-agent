@@ -2,7 +2,6 @@ import path from "node:path";
 import type { DeskApi, SetupStatus } from "@shared/ipc";
 import { dialog, ipcMain, shell } from "electron";
 import { agent } from "./agent/manager";
-import { apiKeyStatus, clearApiKey, saveApiKey } from "./apiKey";
 import {
 	answerApplicationQuestion,
 	answerInboxQuestion,
@@ -14,6 +13,7 @@ import {
 	watchApplications,
 } from "./applications";
 import { claudeStatus } from "./claude";
+import { clearConnection, connectionStatus, saveApiKey, saveEndpoint } from "./connection";
 import { listCredentials, removeCredential, saveCredential, storageBackend } from "./credentials";
 import { isInside } from "./files";
 import { currentHelpRequest, respondToHelp } from "./help";
@@ -34,7 +34,7 @@ async function setupStatus(): Promise<SetupStatus> {
 	const [claude, browserInstalled, settings] = await Promise.all([claudeStatus(), isBrowserInstalled(), getSettings()]);
 	return {
 		claude,
-		apiKey: apiKeyStatus(),
+		connection: connectionStatus(),
 		browserInstalled,
 		workspaceDir: settings.workspaceDir,
 		credentialStorage: storageBackend(),
@@ -123,8 +123,12 @@ const handlers: Handlers = {
 			await saveApiKey(key);
 			return setupStatus();
 		},
-		clearApiKey: async () => {
-			await clearApiKey();
+		setEndpoint: async (endpoint) => {
+			await saveEndpoint(endpoint);
+			return setupStatus();
+		},
+		clearConnection: async () => {
+			await clearConnection();
 			return setupStatus();
 		},
 	},

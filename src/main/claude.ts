@@ -1,16 +1,14 @@
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { ClaudeStatus } from "@shared/ipc";
 import { app } from "electron";
-import { storedApiKey } from "./apiKey";
+import { connectionEnvironment, connectionStatus } from "./connection";
 import { bundledClaudeBinary } from "./runtime";
 
 export function claudeEnvironment(): Record<string, string | undefined> {
-	const apiKey = storedApiKey();
 	return {
 		...process.env,
 		CLAUDE_AGENT_SDK_CLIENT_APP: `dproz-agent/${app.getVersion()}`,
-		// A key saved in the app is an explicit choice, so it wins over a Claude Code sign-in.
-		...(apiKey ? { ANTHROPIC_API_KEY: apiKey } : {}),
+		...connectionEnvironment(),
 	};
 }
 
@@ -37,15 +35,20 @@ export async function claudeStatus(): Promise<ClaudeStatus> {
 		if (!hasCredential && !usesOtherProvider) {
 			return {
 				signedIn: false,
-				reason: "Claude Code is not signed in. Run `claude` in a terminal and sign in, or use an API key.",
+				reason:
+					"Claude Code is not signed in. Run `claude` in a terminal and sign in, or use an API key or another endpoint.",
 			};
 		}
 		return {
 			signedIn: true,
-			method: storedApiKey() ? "api-key" : "claude-code",
-			email: storedApiKey() ? undefined : account.email,
+			method: connectionStatus().kind,
+			email: connectionStatus().kind === "claude-code" ? account.email : undefined,
 			subscription: account.subscriptionType,
-			models: models.map((model) => ({ value: model.value, label: model.displayName })),
+			// Another endpoint serves the one model it was set up with, not Claude's line-up.
+			models:
+				connectionStatus().kind === "custom"
+					? []
+					: models.map((model) => ({ value: model.value, label: model.displayName })),
 		};
 	} catch (error) {
 		return { signedIn: false, reason: (error as Error).message };

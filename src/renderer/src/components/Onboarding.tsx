@@ -1,9 +1,9 @@
 import { Check, CircleAlert, LoaderCircle } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { useDeskEvent, useResource } from "../lib/hooks";
-import { ApiKeyForm } from "./ApiKeyForm";
 import { DocumentsPanel } from "./Documents";
 import { DprozLogo } from "./DprozLogo";
+import { ProviderForm } from "./ProviderForm";
 import { Button } from "./ui";
 
 type StepState = "done" | "todo" | "working" | "problem";
@@ -48,6 +48,7 @@ export function Onboarding({ onDone }: { onDone: () => Promise<void> }) {
 
 	const status = setup.data;
 	const claude = status?.claude;
+	const connection = status?.connection;
 
 	const installBrowser = async () => {
 		setInstalling(true);
@@ -96,9 +97,14 @@ export function Onboarding({ onDone }: { onDone: () => Promise<void> }) {
 
 					<Step state={!claude ? "working" : claude.signedIn ? "done" : "problem"} title="Claude">
 						{!claude && <p>Checking that Claude Code is signed in on this computer…</p>}
-						{claude?.signedIn && claude.method === "api-key" && (
+						{claude?.signedIn && connection?.kind === "api-key" && (
 							<p className="selectable">
-								Using your API key ending in {status?.apiKey.hint}. The agent's work is billed to that key.
+								Using your API key ending in {connection.hint}. The agent's work is billed to that key.
+							</p>
+						)}
+						{claude?.signedIn && connection?.kind === "custom" && (
+							<p className="selectable">
+								Using {connection.model} at {connection.baseUrl}.
 							</p>
 						)}
 						{claude?.signedIn && claude.method === "claude-code" && (
@@ -117,10 +123,8 @@ export function Onboarding({ onDone }: { onDone: () => Promise<void> }) {
 								<Button className="mt-3" onClick={() => void setup.refresh()}>
 									Check again
 								</Button>
-								<p className="mt-5 mb-2">Or use an Anthropic API key instead:</p>
-								<div className="font-sans">
-									<ApiKeyForm onSaved={(next) => setup.setData(next)} />
-								</div>
+								<p className="mt-5 mb-2">Or connect another way:</p>
+								<ProviderForm onSaved={(next) => setup.setData(next)} />
 							</>
 						)}
 					</Step>

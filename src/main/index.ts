@@ -1,8 +1,8 @@
 import path from "node:path";
 import { app, BrowserWindow, Menu, nativeImage, nativeTheme, shell, Tray } from "electron";
 import { agent } from "./agent/manager";
-import { loadApiKey } from "./apiKey";
 import { onStatusChange, watchApplications } from "./applications";
+import { loadConnection } from "./connection";
 import { registerIpc } from "./ipc";
 import { notifyStatus } from "./notify";
 import { startUpdateChecks } from "./updates";
@@ -105,7 +105,7 @@ if (!app.requestSingleInstanceLock()) {
 		// The packaged app carries its own icon; in development the dock would show Electron's.
 		if (!app.isPackaged) app.dock?.setIcon(appIcon());
 		await ensureWorkspace();
-		await loadApiKey();
+		await loadConnection();
 		await agent.load();
 		registerIpc();
 		onStatusChange(notifyStatus);

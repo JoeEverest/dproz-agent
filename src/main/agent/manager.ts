@@ -5,6 +5,7 @@ import type { ActivityItem, AgentState } from "@shared/ipc";
 import { app } from "electron";
 import { hasUndeliveredAnswers } from "../applications";
 import { claudeEnvironment } from "../claude";
+import { connectionModel } from "../connection";
 import { broadcast } from "../events";
 import { readJson, writeJson } from "../files";
 import { cancelHelp } from "../help";
@@ -212,7 +213,7 @@ class AgentManager {
 						...(submitAllowed ? [] : BROWSER_INPUT_TOOLS),
 						...(fenced ? ["WebFetch", "WebSearch"] : []),
 					],
-					model: settings.model || undefined,
+					model: connectionModel() ?? (settings.model || undefined),
 					abortController: this.abort,
 					env: claudeEnvironment(),
 					pathToClaudeCodeExecutable: bundledClaudeBinary(),
