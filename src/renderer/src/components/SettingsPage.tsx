@@ -1,23 +1,13 @@
 import type { Settings, SetupStatus, UpdateInfo, WorkspaceDocument } from "@shared/ipc";
 import { PasswordInput, PasswordInputControl, PasswordInputToggle } from "@ui-sdk/react/password-input";
-import {
-	ArrowDownToLine,
-	Eye,
-	EyeOff,
-	FileText,
-	KeyRound,
-	Pencil,
-	Plus,
-	ShieldAlert,
-	Trash2,
-	Upload,
-} from "lucide-react";
+import { Eye, EyeOff, FileText, KeyRound, Pencil, Plus, ShieldAlert, Trash2, Upload } from "lucide-react";
 import { type DragEvent, type FormEvent, type ReactNode, useState } from "react";
 import { fileSize, relativeTime } from "../lib/format";
 import { useResource } from "../lib/hooks";
 import { Markdown } from "./Markdown";
 import { PageHeader } from "./PageHeader";
 import { ModelChoice, ProviderForm } from "./ProviderForm";
+import { UpdateButton, updateNote } from "./UpdateControl";
 import { Button, Field, IconButton, Input, Notice, Picker, Textarea, Toggle } from "./ui";
 
 type GroupProps = { title: string; note?: string; action?: ReactNode; children: ReactNode };
@@ -528,13 +518,12 @@ function AboutAppGroup({ update }: { update: UpdateInfo | null }) {
 
 	const note = !update
 		? ""
-		: update.available
-			? `Version ${update.latest} is available.`
-			: update.error
+		: (updateNote(update) ??
+			(update.error
 				? "The last check for a new version did not get through."
 				: update.checkedAt
 					? `You have the latest version. Checked ${relativeTime(update.checkedAt)}.`
-					: "It checks for a new version every few hours.";
+					: "It checks for a new version every few hours."));
 
 	return (
 		<Group title="About">
@@ -542,15 +531,8 @@ function AboutAppGroup({ update }: { update: UpdateInfo | null }) {
 				title={`Dproz Agent ${update?.current ?? ""}`}
 				note={note}
 				control={
-					update?.available && update.url ? (
-						<Button
-							size="sm"
-							tone="primary"
-							icon={<ArrowDownToLine size={13} strokeWidth={2} aria-hidden />}
-							onClick={() => update.url && void window.desk.shell.openExternal(update.url)}
-						>
-							Download {update.latest}
-						</Button>
+					update?.available ? (
+						<UpdateButton update={update} />
 					) : (
 						<Button size="sm" disabled={checking} onClick={() => void check()}>
 							{checking ? "Checking" : "Check for updates"}

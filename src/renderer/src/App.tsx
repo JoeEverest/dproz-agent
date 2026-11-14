@@ -1,4 +1,4 @@
-import { ArrowDownToLine, PanelLeftClose, PanelLeftOpen, Settings as SettingsIcon } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, Settings as SettingsIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Board } from "./components/Board";
 import { DprozLogo } from "./components/DprozLogo";
@@ -7,6 +7,7 @@ import { JobsIcon, ProfileIcon, QuestionsIcon } from "./components/NavIcons";
 import { Onboarding } from "./components/Onboarding";
 import { QuestionsPage } from "./components/QuestionsPage";
 import { ProfilePage, SettingsPage } from "./components/SettingsPage";
+import { UpdateIcon } from "./components/UpdateControl";
 import { IconButton } from "./components/ui";
 import { useResource } from "./lib/hooks";
 import { useOpenQuestions } from "./lib/questions";
@@ -143,16 +144,7 @@ export function App() {
 					>
 						<SettingsIcon size={16} strokeWidth={1.75} aria-hidden />
 					</IconButton>
-					{update?.available && (
-						<IconButton
-							label={`Version ${update.latest} is available. Download it`}
-							className="relative bg-accent-soft text-accent-ink hover:bg-accent-soft hover:text-accent-ink"
-							onClick={() => update.url && void window.desk.shell.openExternal(update.url)}
-						>
-							<ArrowDownToLine size={15} strokeWidth={2} aria-hidden />
-							<span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-accent ring-2 ring-sunk" />
-						</IconButton>
-					)}
+					<UpdateIcon update={update} />
 				</div>
 			</nav>
 

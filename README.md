@@ -83,7 +83,18 @@ inbox.json               general questions the agent has asked you
 
 ### Updates
 
-The app asks the download site for the latest release when it starts and every 4 hours (`src/main/updates.ts`). When a newer version is out, a download icon appears at the bottom of the sidebar and on the Settings page; it opens the installer download in the browser. There is no silent auto-update, because the builds are not signed with a Developer ID.
+The app asks the download site for the latest release when it starts and every 4 hours (`src/main/updates.ts`). When a newer version is out, an update icon appears at the bottom of the sidebar and on the Settings page. Pressing it downloads the new version inside the app, checks it against the SHA-256 GitHub records for the release file, and then offers **Restart to update**, which closes the app, puts the new version in place and opens it again.
+
+The builds are not signed with an Apple Developer ID, and the standard macOS updater refuses to update an unsigned app, so the app does the swap itself:
+
+| Install | How it updates |
+| --- | --- |
+| macOS | Downloads the zipped app, unpacks it, and a small script swaps the `.app` bundle once the app has quit. |
+| Linux AppImage | The same, swapping the AppImage file. |
+| Windows | Downloads the installer and runs it silently. |
+| Linux `.deb`, an app opened from the disk image, a development run | Cannot replace itself: the button opens the installer download instead. |
+
+Nothing is downloaded until the button is pressed. `node tests/e2e/run.mjs update` runs a real update of a packaged macOS copy inside a sandbox (the two builds it needs are named at the top of `tests/e2e/update.mjs`).
 
 ## Tests
 
@@ -122,7 +133,7 @@ The app icon is rendered from the Dproz logo by `node tools/icon.mjs` into `buil
 
 `site/` is the landing page, deployed to Vercel (`cd site && vercel deploy --prod`).
 
-- `GET /api/latest` returns the newest version and its download links, read from this repository's public releases and cached for five minutes. The app's update check reads the same endpoint.
+- `GET /api/latest` returns the newest version, its download links, and the package and checksum the app uses to update itself, read from this repository's public releases and cached for five minutes. The app's update check reads the same endpoint.
 - `GET /api/download?platform=mac|linux|deb` redirects to that installer.
 
 ## Environment variables

@@ -92,9 +92,19 @@ export type UpdateInfo = {
 	current: string;
 	latest?: string;
 	available: boolean;
+	/** Where to download the new version by hand: the fallback when it cannot be installed in place. */
 	url?: string;
 	checkedAt?: string;
 	error?: string;
+	/** Whether this copy can download the new version itself and install it on restart. */
+	inPlace: boolean;
+	/** Why it cannot, when that is something the user can fix. */
+	blocked?: string;
+	stage: "idle" | "downloading" | "ready" | "failed";
+	/** How much of the download has arrived, from 0 to 1. */
+	progress?: number;
+	/** What went wrong with the download or the install. */
+	problem?: string;
 };
 
 export type BrowserInstallProgress = { line: string; done: boolean; error?: string };
@@ -174,6 +184,8 @@ export type DeskApi = {
 	updates: {
 		status(): Promise<UpdateInfo>;
 		check(): Promise<UpdateInfo>;
+		download(): Promise<UpdateInfo>;
+		install(): Promise<UpdateInfo>;
 	};
 	shell: {
 		openExternal(url: string): Promise<void>;
@@ -205,7 +217,7 @@ export const DESK_METHODS = {
 	agent: ["state", "activity", "onboard", "documentsAdded", "setPaused", "stop"],
 	help: ["current", "respond"],
 	claude: ["setApiKey", "setEndpoint", "endpointModels", "setEndpointModel", "clearConnection"],
-	updates: ["status", "check"],
+	updates: ["status", "check", "download", "install"],
 	shell: ["openExternal", "open"],
 } as const satisfies { [Area in RemoteAreas]: readonly (keyof DeskApi[Area])[] };
 

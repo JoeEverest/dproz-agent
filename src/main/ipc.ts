@@ -27,7 +27,7 @@ import { isInside } from "./files";
 import { currentHelpRequest, respondToHelp } from "./help";
 import { installBrowser, isBrowserInstalled } from "./runtime";
 import { getSettings, updateSettings } from "./settings";
-import { checkForUpdate, updateStatus } from "./updates";
+import { checkForUpdate, downloadUpdate, installUpdate, updateStatus } from "./updates";
 import { addDocuments, listDocuments, readAboutMe, removeDocument, workspacePaths, writeAboutMe } from "./workspace";
 
 type Remote<T> = {
@@ -158,7 +158,7 @@ const handlers: Handlers = {
 			return setupStatus();
 		},
 	},
-	updates: { status: updateStatus, check: checkForUpdate },
+	updates: { status: updateStatus, check: checkForUpdate, download: downloadUpdate, install: installUpdate },
 	shell: {
 		openExternal: async (url) => {
 			if (/^(https?|mailto):/i.test(url)) await shell.openExternal(url);

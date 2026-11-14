@@ -9,7 +9,12 @@ import { registerPreviewScheme, servePreviews } from "./preview";
 import { startUpdateChecks } from "./updates";
 import { ensureWorkspace } from "./workspace";
 
-if (process.env.DPROZ_AGENT_USER_DATA) app.setPath("userData", process.env.DPROZ_AGENT_USER_DATA);
+if (process.env.DPROZ_AGENT_USER_DATA) {
+	app.setPath("userData", process.env.DPROZ_AGENT_USER_DATA);
+	// A test build is signed differently from the installed app, so macOS would stop it with a keychain
+	// prompt. Only a run with its own data folder may swap the keychain for Chromium's stand-in.
+	if (process.env.DPROZ_AGENT_MOCK_KEYCHAIN) app.commandLine.appendSwitch("use-mock-keychain");
+}
 registerPreviewScheme();
 
 let mainWindow: BrowserWindow | null = null;

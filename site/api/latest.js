@@ -17,7 +17,14 @@ export default async function handler(_request, response) {
 		response.setHeader("cache-control", "public, s-maxage=300, stale-while-revalidate=86400");
 		response
 			.status(200)
-			.json({ version: release.version, publishedAt: release.publishedAt, page: releasesPage, downloads, files });
+			.json({
+				version: release.version,
+				publishedAt: release.publishedAt,
+				page: releasesPage,
+				downloads,
+				files,
+				updates: release.updates,
+			});
 	} catch (cause) {
 		response.status(502).json({ error: cause.message });
 	}
