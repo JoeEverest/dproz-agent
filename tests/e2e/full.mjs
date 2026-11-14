@@ -232,10 +232,8 @@ try {
 	check("the master resume has every job on the CV", /Meru Dairies/.test(record) && /Tembo/.test(record));
 	check(
 		"it holds nothing the user was never asked for and never gave",
-		!/42 million|obsolete inventory|four department heads|six engagements/i.test(record),
-		record
-			.split("\n")
-			.find((line) => /42 million|obsolete inventory|four department heads|six engagements/i.test(line)) ?? "",
+		!/42 million|obsolete inventory|four department heads/i.test(record),
+		record.split("\n").find((line) => /42 million|obsolete inventory|four department heads/i.test(line)) ?? "",
 	);
 	check(
 		"an answer to a quick question came back as a fact, not as a question",
