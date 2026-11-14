@@ -12,3 +12,4 @@ tests/e2e/.tmp
 .env
 .env.*
 !.env.example
+.impeccable/mocks

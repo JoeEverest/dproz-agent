@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-11-14T00:55:46.145Z",
+        "reason": "user confirmed: Joe set Inter as the only font for the product on 2026-11-13"
+      }
+    ]
+  }
+}

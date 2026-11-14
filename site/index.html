@@ -33,13 +33,22 @@
 				--on-solid: #ffffff;
 				--accent-ink: #00509d;
 				--fill: #edeef1;
-				--shot-shadow: 0 30px 60px -30px rgb(18 19 22 / 28%), 0 0 0 1px #dcdfe4;
+				--glow: #dcecff;
+				--live: #dfeeff;
+				--sent: #007a35;
+				--sent-wash: #e6f7ee;
+				--card-ring: 0 1px 2px rgb(18 19 22 / 5%), 0 0 0 1px #dcdfe4;
+				--stage-a: #8fcbff;
+				--stage-b: #0a88ed;
+				--stage-c: #0069cb;
+				--stage-d: #0d4492;
+				--ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 			}
 
 			@media (prefers-color-scheme: dark) {
 				:root {
 					--canvas: #151618;
-					--surface: #1a1b1e;
+					--surface: #1d1e21;
 					--ink: #eceef1;
 					--ink-2: #b9bdc6;
 					--ink-3: #9197a3;
@@ -48,7 +57,15 @@
 					--solid-hover: #0073de;
 					--accent-ink: #8cc7ff;
 					--fill: #26282c;
-					--shot-shadow: 0 30px 60px -30px rgb(0 0 0 / 70%), 0 0 0 1px #2e3035;
+					--glow: transparent;
+					--live: #12304f;
+					--sent: #6fdc9f;
+					--sent-wash: #143524;
+					--card-ring: 0 0 0 1px #33363c;
+					--stage-a: #0a88ed;
+					--stage-b: #0069cb;
+					--stage-c: #0d4492;
+					--stage-d: #002b5c;
 				}
 			}
 
@@ -56,14 +73,34 @@
 				box-sizing: border-box;
 			}
 
+			html {
+				scrollbar-color: var(--ink-3) transparent;
+			}
+
 			body {
 				margin: 0;
 				background: var(--canvas);
 				color: var(--ink);
 				font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-				font-size: 15px;
+				font-size: 16px;
 				line-height: 1.55;
 				-webkit-font-smoothing: antialiased;
+				overflow-x: clip;
+			}
+
+			/* A soft Dproz-blue light behind the top of the page. */
+			body::before {
+				content: "";
+				position: absolute;
+				inset: 0 0 auto;
+				height: 620px;
+				background: radial-gradient(70% 100% at 50% 0%, var(--glow), transparent 72%);
+				pointer-events: none;
+			}
+
+			::selection {
+				background: #0069cb;
+				color: #ffffff;
 			}
 
 			a {
@@ -73,12 +110,18 @@
 
 			:focus-visible {
 				outline: 2px solid var(--solid);
-				outline-offset: 2px;
+				outline-offset: 3px;
+				border-radius: 4px;
+			}
+
+			svg {
+				flex-shrink: 0;
 			}
 
 			.wrap {
+				position: relative;
 				width: 100%;
-				max-width: 1080px;
+				max-width: 1120px;
 				margin: 0 auto;
 				padding: 0 24px;
 			}
@@ -87,12 +130,12 @@
 				display: flex;
 				align-items: center;
 				justify-content: space-between;
-				height: 72px;
+				height: 76px;
 			}
 
 			.logo {
 				display: block;
-				height: 36px;
+				height: 38px;
 				width: auto;
 			}
 
@@ -117,20 +160,29 @@
 				display: inline-flex;
 				align-items: center;
 				justify-content: center;
-				gap: 8px;
-				height: 40px;
-				padding: 0 18px;
+				gap: 10px;
+				height: 52px;
+				padding: 0 24px 0 20px;
 				border: 1px solid transparent;
-				border-radius: 8px;
+				border-radius: 12px;
 				background: var(--solid);
+				box-shadow:
+					inset 0 1px 0 rgb(255 255 255 / 22%),
+					0 8px 18px -10px rgb(18 19 22 / 45%);
 				color: var(--on-solid);
 				font: inherit;
+				font-size: 17px;
 				font-weight: 500;
 				text-decoration: none;
 				white-space: nowrap;
 				transition:
 					background-color 150ms ease-out,
+					box-shadow 150ms ease-out,
 					scale 150ms ease-out;
+			}
+
+			.button svg {
+				transition: translate 200ms var(--ease-out);
 			}
 
 			.button:active {
@@ -138,13 +190,22 @@
 			}
 
 			.button.small {
-				height: 32px;
-				padding: 0 12px;
-				font-size: 13px;
+				height: 36px;
+				padding: 0 14px;
+				border-radius: 9px;
+				box-shadow: none;
+				font-size: 14px;
+			}
+
+			.button.light {
+				background: #ffffff;
+				box-shadow: 0 12px 28px -12px rgb(0 20 50 / 60%);
+				color: #0d4492;
 			}
 
 			.button[aria-disabled="true"] {
 				background: var(--fill);
+				box-shadow: none;
 				color: var(--ink-2);
 				pointer-events: none;
 			}
@@ -153,59 +214,143 @@
 				.button:hover {
 					background: var(--solid-hover);
 				}
+
+				.button.light:hover {
+					background: #eef6ff;
+				}
+
+				.button:hover svg {
+					translate: 0 2px;
+				}
 			}
 
 			.hero {
-				padding: 56px 0 44px;
+				padding: 64px 0 0;
 				text-align: center;
 			}
 
 			h1 {
-				max-width: 18ch;
+				max-width: 16ch;
 				margin: 0 auto;
-				font-size: clamp(30px, 5vw, 44px);
-				line-height: 1.1;
+				font-size: clamp(38px, 6.4vw, 72px);
+				line-height: 1.02;
 				font-weight: 600;
-				letter-spacing: -0.025em;
+				letter-spacing: -0.04em;
 				text-wrap: balance;
 			}
 
 			.lede {
-				max-width: 56ch;
-				margin: 16px auto 0;
+				max-width: 54ch;
+				margin: 22px auto 0;
 				color: var(--ink-2);
-				font-size: 16px;
+				font-size: clamp(16px, 1.6vw, 19px);
 				text-wrap: pretty;
 			}
 
 			.actions {
-				margin-top: 28px;
+				margin-top: 32px;
 			}
 
 			.meta {
-				min-height: 20px;
-				margin: 12px 0 0;
+				min-height: 22px;
+				margin: 14px 0 0;
 				color: var(--ink-3);
-				font-size: 13px;
+				font-size: 14px;
+			}
+
+			/* The stage: a field of Dproz blue the app window rises out of. */
+			.stage {
+				position: relative;
+				margin-top: 56px;
+				padding: 6% 6% 0;
+				overflow: hidden;
+				border-radius: 28px;
+				background:
+					radial-gradient(60% 90% at 8% 0%, var(--stage-a), transparent 62%),
+					radial-gradient(55% 80% at 100% 8%, var(--stage-b), transparent 66%),
+					linear-gradient(160deg, var(--stage-c), var(--stage-d));
+				perspective: 1600px;
+			}
+
+			.stage::after {
+				content: "";
+				position: absolute;
+				inset: 0;
+				background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+				mix-blend-mode: soft-light;
+				opacity: 0.5;
+				pointer-events: none;
 			}
 
 			.shot {
+				position: relative;
+				z-index: 1;
 				display: block;
-				width: 100%;
+				width: 106%;
+				max-width: none;
 				height: auto;
-				border-radius: 12px;
+				margin: 0 -3% -7%;
+				transform-origin: 50% 100%;
 			}
 
-			.frame {
-				/* the captures carry their own window shadow, so they sit wider than the text column */
-				margin: 0 -3%;
+			.toast {
+				position: absolute;
+				z-index: 2;
+				top: 7%;
+				right: 4%;
+				display: flex;
+				align-items: center;
+				gap: 12px;
+				width: 300px;
+				padding: 12px 14px;
+				border-radius: 16px;
+				background: var(--surface);
+				box-shadow:
+					0 18px 40px -14px rgb(0 20 50 / 55%),
+					0 0 0 1px rgb(0 20 50 / 8%);
+				color: var(--ink);
+				font-size: 14px;
+				line-height: 1.35;
+				text-align: left;
+			}
+
+			.toast .app {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				width: 38px;
+				height: 38px;
+				border-radius: 10px;
+				background: #0d4492;
+			}
+
+			.toast .app img {
+				width: 30px;
+				height: auto;
+			}
+
+			.toast b {
+				display: flex;
+				justify-content: space-between;
+				font-weight: 600;
+			}
+
+			.toast b span {
+				color: var(--ink-3);
+				font-size: 12px;
+				font-weight: 400;
+			}
+
+			.toast div {
+				min-width: 0;
+				flex: 1;
 			}
 
 			.steps {
 				display: grid;
-				grid-template-columns: repeat(3, 1fr);
-				gap: 40px;
-				margin: 56px 0 0;
+				grid-template-columns: 1fr 1.25fr 1fr;
+				gap: 28px;
+				margin: 88px 0 0;
 				padding: 0;
 				list-style: none;
 				counter-reset: step;
@@ -213,25 +358,22 @@
 
 			.steps li {
 				counter-increment: step;
-				border-top: 1px solid var(--line);
-				padding-top: 16px;
 			}
 
-			.steps li::before {
+			.steps h2::before {
 				content: counter(step);
+				display: inline-block;
+				width: 1.6em;
 				color: var(--ink-3);
-				font-size: 13px;
+				font-weight: 400;
 				font-variant-numeric: tabular-nums;
 			}
 
 			h2 {
-				margin: 6px 0 4px;
-				font-size: 15px;
+				margin: 0 0 6px;
+				font-size: 17px;
 				font-weight: 600;
-			}
-
-			.notes > div {
-				min-width: 0;
+				letter-spacing: -0.01em;
 			}
 
 			.steps p,
@@ -240,23 +382,205 @@
 				color: var(--ink-2);
 			}
 
+			.steps li > p {
+				padding-left: 1.7em;
+			}
+
+			/* Small working pieces of the app, shown at their real size. */
+			.vignette {
+				display: flex;
+				flex-direction: column;
+				justify-content: center;
+				gap: 8px;
+				height: 216px;
+				margin-bottom: 22px;
+				padding: 20px;
+				overflow: hidden;
+				border-radius: 20px;
+				background: var(--fill);
+				font-size: 13px;
+				line-height: 1.4;
+			}
+
+			.file,
+			.job {
+				border-radius: 10px;
+				background: var(--surface);
+				box-shadow: var(--card-ring);
+			}
+
+			.file {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				padding: 9px 12px;
+			}
+
+			.file span {
+				min-width: 0;
+				flex: 1;
+				overflow: hidden;
+				font-weight: 500;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+			}
+
+			.file small,
+			.job small {
+				color: var(--ink-3);
+				font-size: 12px;
+			}
+
+			.file svg {
+				color: var(--ink-3);
+			}
+
+			.job {
+				width: min(100%, 290px);
+				margin: 0 auto;
+				padding: 14px 16px;
+				box-shadow:
+					0 0 0 2px var(--solid),
+					0 14px 26px -18px rgb(18 19 22 / 40%);
+			}
+
+			.job b {
+				display: block;
+				font-size: 14px;
+				font-weight: 500;
+			}
+
+			.job small {
+				display: block;
+			}
+
+			.status {
+				position: relative;
+				height: 22px;
+				margin-top: 10px;
+			}
+
+			.chip {
+				display: inline-flex;
+				align-items: center;
+				gap: 5px;
+				height: 22px;
+				padding: 0 8px;
+				border-radius: 6px;
+				background: var(--live);
+				color: var(--accent-ink);
+				font-size: 12px;
+				font-weight: 500;
+				white-space: nowrap;
+			}
+
+			.chip.sent {
+				background: var(--sent-wash);
+				color: var(--sent);
+			}
+
+			.status .chip {
+				position: absolute;
+				top: 0;
+				left: 0;
+				opacity: 0;
+				animation: step 12s infinite both;
+			}
+
+			.status .chip:nth-child(2) {
+				animation-delay: 3s;
+			}
+
+			.status .chip:nth-child(3) {
+				animation-delay: 6s;
+			}
+
+			.status .chip:nth-child(4) {
+				animation-delay: 9s;
+			}
+
+			@keyframes step {
+				0% {
+					opacity: 0;
+					translate: 0 6px;
+					filter: blur(3px);
+				}
+
+				3%,
+				23% {
+					opacity: 1;
+					translate: 0 0;
+					filter: blur(0);
+				}
+
+				26%,
+				100% {
+					opacity: 0;
+					translate: 0 -6px;
+					filter: blur(3px);
+				}
+			}
+
+			.spin {
+				animation: spin 0.8s linear infinite;
+			}
+
+			@keyframes spin {
+				to {
+					rotate: 360deg;
+				}
+			}
+
+			.bubble {
+				max-width: 88%;
+				padding: 9px 13px;
+				border-radius: 16px 16px 16px 5px;
+				background: var(--surface);
+				box-shadow: var(--card-ring);
+			}
+
+			.bubble.me {
+				align-self: flex-end;
+				border-radius: 16px 16px 5px 16px;
+				background: var(--solid);
+				box-shadow: none;
+				color: #ffffff;
+			}
+
+			.saved {
+				display: flex;
+				align-items: center;
+				align-self: flex-end;
+				gap: 4px;
+				color: var(--ink-3);
+				font-size: 12px;
+			}
+
+			.saved svg {
+				color: var(--solid);
+			}
+
 			.notes {
 				display: grid;
 				grid-template-columns: repeat(2, 1fr);
-				gap: 40px;
-				margin: 64px 0 0;
-				padding: 28px;
+				gap: 48px;
+				margin: 88px 0 0;
+				padding: 32px;
 				border: 1px solid var(--line);
-				border-radius: 12px;
+				border-radius: 20px;
 				background: var(--surface);
+			}
+
+			.notes > div {
+				min-width: 0;
 			}
 
 			code {
 				display: block;
-				margin-top: 10px;
-				padding: 10px 12px;
+				margin-top: 12px;
+				padding: 11px 14px;
 				overflow-x: auto;
-				border-radius: 8px;
+				border-radius: 10px;
 				background: var(--fill);
 				color: var(--ink);
 				font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -264,33 +588,184 @@
 				white-space: nowrap;
 			}
 
-			footer {
-				margin-top: 64px;
-				padding: 24px 0 40px;
-				border-top: 1px solid var(--line);
-				color: var(--ink-3);
-				font-size: 13px;
+			/* The close repeats the stage's blue so the page ends where it peaked. */
+			.close {
+				position: relative;
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 32px;
+				margin-top: 28px;
+				padding: 44px 48px;
+				overflow: hidden;
+				border-radius: 20px;
+				background:
+					radial-gradient(50% 120% at 0% 0%, var(--stage-b), transparent 65%),
+					linear-gradient(120deg, var(--stage-c), var(--stage-d));
+				color: #ffffff;
 			}
 
-			@media (max-width: 760px) {
-				.steps,
-				.notes {
-					grid-template-columns: 1fr;
-					gap: 24px;
+			.close p {
+				position: relative;
+				max-width: 20ch;
+				margin: 0;
+				font-size: clamp(24px, 3.2vw, 34px);
+				line-height: 1.12;
+				font-weight: 600;
+				letter-spacing: -0.03em;
+				text-wrap: balance;
+			}
+
+			.close .mark {
+				position: absolute;
+				right: -5%;
+				bottom: -42%;
+				width: 44%;
+				opacity: 0.14;
+				pointer-events: none;
+			}
+
+			.close .button {
+				position: relative;
+			}
+
+			footer {
+				padding: 28px 0 44px;
+				color: var(--ink-3);
+				font-size: 14px;
+			}
+
+			/* One entrance: the words settle, then the window rises and the notification lands. */
+			@keyframes rise {
+				from {
+					opacity: 0;
+					translate: 0 14px;
+					filter: blur(4px);
+				}
+			}
+
+			@keyframes window-in {
+				from {
+					opacity: 0;
+					transform: translateY(9%) rotateX(14deg) scale(0.94);
+				}
+			}
+
+			@keyframes toast-in {
+				from {
+					opacity: 0;
+					translate: 0 -18px;
+					scale: 0.94;
+				}
+			}
+
+			@media (prefers-reduced-motion: no-preference) {
+				.hero > * {
+					animation: rise 500ms var(--ease-out) both;
 				}
 
-				.hero {
-					padding-top: 32px;
+				.hero > :nth-child(2) {
+					animation-delay: 80ms;
 				}
 
-				.frame {
-					margin: 0 -24px;
+				.hero > :nth-child(3) {
+					animation-delay: 160ms;
+				}
+
+				.stage {
+					animation: rise 600ms 220ms var(--ease-out) both;
+				}
+
+				.shot {
+					animation: window-in 900ms 300ms var(--ease-out) both;
+				}
+
+				.toast {
+					animation: toast-in 500ms 1500ms var(--ease-out) both;
 				}
 			}
 
 			@media (prefers-reduced-motion: reduce) {
 				.button:active {
 					scale: 1;
+				}
+
+				.spin {
+					animation: none;
+				}
+
+				/* Show the finished state instead of cycling through the steps. */
+				.status .chip {
+					animation: none;
+				}
+
+				.status .chip:last-child {
+					opacity: 1;
+				}
+			}
+
+			@media (max-width: 860px) {
+				.steps {
+					grid-template-columns: 1fr;
+					gap: 40px;
+					margin-top: 56px;
+				}
+
+				.notes {
+					grid-template-columns: 1fr;
+					gap: 28px;
+					margin-top: 56px;
+					padding: 24px;
+				}
+
+				.close {
+					flex-direction: column;
+					align-items: flex-start;
+					padding: 32px 24px;
+				}
+
+				.hero {
+					padding-top: 36px;
+				}
+
+				.stage {
+					margin: 40px -12px 0;
+					border-radius: 20px;
+				}
+
+				.toast {
+					top: 4%;
+					right: 3%;
+					width: 230px;
+					padding: 8px 10px;
+					font-size: 12px;
+				}
+
+				.toast .app {
+					width: 30px;
+					height: 30px;
+					border-radius: 8px;
+				}
+
+				.toast .app img {
+					width: 24px;
+				}
+			}
+
+			/* On a phone, show the left of the board large enough to read, with the notification above it. */
+			@media (max-width: 600px) {
+				.stage {
+					padding: 84px 0 0 16px;
+				}
+
+				.shot {
+					width: 205%;
+					margin: 0 0 -12% -4%;
+				}
+
+				.toast {
+					top: 14px;
+					right: 14px;
 				}
 			}
 		</style>
@@ -299,8 +774,8 @@
 		<div class="wrap">
 			<header>
 				<a href="/" aria-label="Dproz Agent">
-					<img class="logo light" src="assets/logo-light.svg" alt="Dproz" width="69" height="36" />
-					<img class="logo dark" src="assets/logo-dark.svg" alt="Dproz" width="69" height="36" />
+					<img class="logo light" src="assets/logo-light.svg" alt="Dproz" width="73" height="38" />
+					<img class="logo dark" src="assets/logo-dark.svg" alt="Dproz" width="73" height="38" />
 				</a>
 				<a class="button small" data-download href="/api/download">Download</a>
 			</header>
@@ -313,12 +788,22 @@
 						good match, applies in its own browser, and keeps a board of everything it sent.
 					</p>
 					<div class="actions">
-						<a class="button" data-download data-primary href="/api/download">Download</a>
+						<a class="button" data-download data-primary href="/api/download">
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14" /></svg>
+							<span>Download</span>
+						</a>
 						<p class="meta" id="meta" aria-live="polite">Checking for the latest version…</p>
 					</div>
 				</section>
 
-				<div class="frame">
+				<div class="stage">
+					<div class="toast" role="img" aria-label="A notification from Dproz Agent: Applied, Finance Officer at Kilele Foods Ltd">
+						<span class="app"><img src="assets/logo-dark.svg" alt="" /></span>
+						<div>
+							<b>Applied <span>now</span></b>
+							Finance Officer at Kilele Foods Ltd
+						</div>
+					</div>
 					<img
 						class="shot light"
 						src="assets/app-light.png"
@@ -337,6 +822,20 @@
 
 				<ol class="steps">
 					<li>
+						<div class="vignette" aria-hidden="true">
+							<div class="file">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zm0 0v5h5M9 13h6M9 17h4" /></svg>
+								<span>Resume.pdf</span><small>180 KB</small>
+							</div>
+							<div class="file">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zm0 0v5h5M9 13h6M9 17h4" /></svg>
+								<span>CPA(T) Certificate.pdf</span><small>402 KB</small>
+							</div>
+							<div class="file">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zm0 0v5h5M9 13h6M9 17h4" /></svg>
+								<span>Reference, Kilimo Foods.pdf</span><small>94 KB</small>
+							</div>
+						</div>
 						<h2>Hand over your documents</h2>
 						<p>
 							Resume, certificates, references, an old cover letter. It reads them and writes down what it knows about
@@ -344,6 +843,18 @@
 						</p>
 					</li>
 					<li>
+						<div class="vignette" aria-hidden="true">
+							<div class="job">
+								<b>Cost Accountant</b>
+								<small>Kibo Bottlers · Arusha, Tanzania</small>
+								<div class="status">
+									<span class="chip"><svg class="spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.2-8.56" /></svg>Checking fit against the posting</span>
+									<span class="chip"><svg class="spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.2-8.56" /></svg>Writing the cover letter</span>
+									<span class="chip"><svg class="spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.2-8.56" /></svg>Judging it as the hiring manager</span>
+									<span class="chip sent"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>Sent, with 2 documents</span>
+								</div>
+							</div>
+						</div>
 						<h2>It searches and applies on its own</h2>
 						<p>
 							Every few hours it checks what is new. Each good match gets its own tailored application, judged before
@@ -351,6 +862,14 @@
 						</p>
 					</li>
 					<li>
+						<div class="vignette" aria-hidden="true">
+							<div class="bubble">Do you hold a valid driving licence, and which class?</div>
+							<div class="bubble me">Yes, class B.</div>
+							<div class="saved">
+								<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="m2 12.5 4.5 4.5L15 8.5M12 15l2 2 8-8.5" /></svg>
+								Saved to what the agent knows
+							</div>
+						</div>
 						<h2>You see everything it sent</h2>
 						<p>
 							Every job is a card with the exact documents that went out. When it needs something only you know, it
@@ -374,9 +893,21 @@
 						<code>xattr -cr "/Applications/Dproz Agent.app"</code>
 					</div>
 				</section>
+
+				<section class="close" aria-label="Download">
+					<img class="mark" src="assets/logo-dark.svg" alt="" />
+					<p>Set it up once. Check the board when you feel like it.</p>
+					<a class="button light" data-download data-primary href="/api/download">
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14" /></svg>
+						<span>Download</span>
+					</a>
+				</section>
 			</main>
 
-			<footer>Dproz Agent is an early build from <a href="https://www.dproz.com">Dproz</a>.</footer>
+			<footer>
+				Dproz Agent is an early build from <a href="https://www.dproz.com">Dproz</a>. The example jobs shown are made
+				up.
+			</footer>
 		</div>
 
 		<script>
@@ -406,7 +937,8 @@
 							continue;
 						}
 						button.href = latest.downloads[mine];
-						if (button.hasAttribute("data-primary")) button.textContent = `Download for ${names[mine]}`;
+						const label = button.querySelector("span");
+						if (label && button.hasAttribute("data-primary")) label.textContent = `Download for ${names[mine]}`;
 					}
 					meta.replaceChildren();
 					const lead = mine
