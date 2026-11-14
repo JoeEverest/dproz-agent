@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Dproz Agent social image</title>
+		<style>
+			@font-face {
+				font-family: "Inter";
+				font-weight: 100 900;
+				src: url("../site/assets/inter.woff2") format("woff2");
+			}
+
+			* {
+				box-sizing: border-box;
+				margin: 0;
+			}
+
+			body {
+				position: relative;
+				width: 1200px;
+				height: 630px;
+				overflow: hidden;
+				background:
+					radial-gradient(55% 90% at 0% 0%, #8fcbff, transparent 62%),
+					radial-gradient(55% 80% at 100% 0%, #0a88ed, transparent 66%),
+					linear-gradient(160deg, #0069cb, #0d4492);
+				color: #ffffff;
+				font-family: "Inter", sans-serif;
+				-webkit-font-smoothing: antialiased;
+			}
+
+			body::after {
+				content: "";
+				position: absolute;
+				inset: 0;
+				background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+				mix-blend-mode: soft-light;
+				opacity: 0.5;
+			}
+
+			.logo {
+				position: absolute;
+				top: 52px;
+				left: 64px;
+				height: 58px;
+			}
+
+			h1 {
+				position: absolute;
+				top: 168px;
+				left: 64px;
+				width: 520px;
+				font-size: 68px;
+				line-height: 1.03;
+				font-weight: 600;
+				letter-spacing: -0.04em;
+			}
+
+			p {
+				position: absolute;
+				bottom: 60px;
+				left: 64px;
+				width: 440px;
+				color: #dfeeff;
+				font-size: 23px;
+				line-height: 1.4;
+			}
+
+			.shot {
+				position: absolute;
+				z-index: 1;
+				top: 70px;
+				left: 560px;
+				width: 1180px;
+			}
+		</style>
+	</head>
+	<body>
+		<img class="logo" src="../site/assets/logo-dark.svg" alt="" />
+		<h1>An agent that applies to jobs for you</h1>
+		<p>Give it your resume once. It finds jobs, writes each application and sends it.</p>
+		<img class="shot" src="../site/assets/app-light.png" alt="" />
+	</body>
+</html>
