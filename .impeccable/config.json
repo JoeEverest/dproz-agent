@@ -8,6 +8,15 @@
         "value": "inter",
         "createdAt": "2026-11-14T00:55:46.145Z",
         "reason": "user confirmed: Joe set Inter as the only font for the product on 2026-11-13"
+      },
+      {
+        "rule": "radial-halo",
+        "value": "*",
+        "files": [
+          "site/index.html"
+        ],
+        "createdAt": "2026-11-14T01:06:10.273Z",
+        "reason": "agent decided: the blue gradient is the lit surface of the stage panel holding the app screenshot, not a page-background halo; the user asked for a livelier page"
       }
     ]
   }
