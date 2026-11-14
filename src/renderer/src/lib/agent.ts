@@ -2,7 +2,7 @@ import type { AgentState } from "@shared/ipc";
 import { useEffect, useState } from "react";
 import { useDeskEvent } from "./hooks";
 
-const idle: AgentState = { status: "idle", queued: 0, active: {}, paused: false };
+const idle: AgentState = { status: "idle", queued: 0, active: {}, paused: false, browserOpen: false };
 
 export function useAgentState(): AgentState {
 	const [state, setState] = useState<AgentState>(idle);

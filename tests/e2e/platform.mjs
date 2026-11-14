@@ -234,6 +234,17 @@ try {
 		(await window.getByText("no system keyring").count()) > 0 === !storage.encrypted,
 	);
 
+	const browserOpen = async () => (await window.evaluate(() => window.desk.agent.state())).browserOpen;
+	const waitFor = async (test) => {
+		for (let waited = 0; waited < 30_000 && !(await test()); waited += 500) await window.waitForTimeout(500);
+		return test();
+	};
+	await window.getByRole("button", { name: "Open browser" }).click();
+	check("the agent's browser opens for the user to sign in", await waitFor(browserOpen));
+	await window.waitForTimeout(3000);
+	await window.getByRole("button", { name: "Close browser" }).click();
+	check("and closing it hands the browser back to the agent", await waitFor(async () => !(await browserOpen())));
+
 	const origin = new URL(updateUrl).origin;
 	const linkField = window.getByRole("textbox", { name: "Link to a page or file about you" });
 	const addLink = window.getByRole("button", { name: "Add link" });

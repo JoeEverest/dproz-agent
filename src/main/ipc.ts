@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { DeskApi, SetupStatus } from "@shared/ipc";
+import { normaliseLink } from "@shared/links";
 import { app, dialog, ipcMain, shell } from "electron";
 import { agent } from "./agent/manager";
 import {
@@ -29,6 +30,7 @@ import { addLink, listLinks, removeLink } from "./links";
 import { installBrowser, isBrowserInstalled } from "./runtime";
 import { getSettings, updateSettings } from "./settings";
 import { checkForUpdate, downloadUpdate, installUpdate, updateStatus } from "./updates";
+import { closeUserBrowser, openUserBrowser } from "./userBrowser";
 import { addDocuments, listDocuments, readAboutMe, removeDocument, workspacePaths, writeAboutMe } from "./workspace";
 
 type Remote<T> = {
@@ -162,6 +164,10 @@ const handlers: Handlers = {
 			await clearConnection();
 			return setupStatus();
 		},
+	},
+	browser: {
+		open: (url) => openUserBrowser((typeof url === "string" && normaliseLink(url)) || undefined),
+		close: async () => closeUserBrowser(),
 	},
 	updates: { status: updateStatus, check: checkForUpdate, download: downloadUpdate, install: installUpdate },
 	shell: {

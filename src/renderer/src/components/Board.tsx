@@ -208,12 +208,16 @@ function AgentPanel({ agent, applications, sweepIntervalHours }: AgentPanelProps
 		return { id, step, name: card ? `${card.title} at ${card.company}` : "A new job" };
 	});
 	const shown = tasks.slice(0, 3);
-	const state = running ? "Working" : agent.paused ? "Paused" : "Idle";
+	// The user has the agent's browser open to sign in: nothing starts until they close it.
+	const waiting = !running && !agent.paused && agent.browserOpen;
+	const state = running ? "Working" : agent.paused ? "Paused" : waiting ? "Waiting" : "Idle";
 	const stateNote = running
 		? (agent.runLabel ?? "Working")
 		: agent.paused
 			? "Nothing runs until you resume it"
-			: "Waiting for the next search";
+			: waiting
+				? "Close its browser to carry on"
+				: "Waiting for the next search";
 
 	return (
 		<section
@@ -224,24 +228,30 @@ function AgentPanel({ agent, applications, sweepIntervalHours }: AgentPanelProps
 				<div className="mt-1 flex items-center gap-2">
 					<span
 						className={`size-2 shrink-0 rounded-full ${
-							running ? "live-dot bg-accent" : agent.paused ? "bg-attention-mark" : "bg-sent"
+							running ? "live-dot bg-accent" : agent.paused || waiting ? "bg-attention-mark" : "bg-sent"
 						}`}
 					/>
 					<p className="text-sm font-semibold">{state}</p>
-					<Button
-						size="sm"
-						className="-my-1 ml-auto"
-						icon={
-							agent.paused ? (
-								<Play size={12} strokeWidth={2} aria-hidden />
-							) : (
-								<Pause size={12} strokeWidth={2} aria-hidden />
-							)
-						}
-						onClick={() => void window.desk.agent.setPaused(!agent.paused)}
-					>
-						{agent.paused ? "Resume" : "Pause"}
-					</Button>
+					{waiting ? (
+						<Button size="sm" className="-my-1 ml-auto" onClick={() => void window.desk.browser.close()}>
+							Close browser
+						</Button>
+					) : (
+						<Button
+							size="sm"
+							className="-my-1 ml-auto"
+							icon={
+								agent.paused ? (
+									<Play size={12} strokeWidth={2} aria-hidden />
+								) : (
+									<Pause size={12} strokeWidth={2} aria-hidden />
+								)
+							}
+							onClick={() => void window.desk.agent.setPaused(!agent.paused)}
+						>
+							{agent.paused ? "Resume" : "Pause"}
+						</Button>
+					)}
 				</div>
 				<p className="mt-0.5 truncate text-xs text-ink-3">{stateNote}</p>
 			</Cell>

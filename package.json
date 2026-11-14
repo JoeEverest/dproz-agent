@@ -1,7 +1,7 @@
 {
 	"name": "dproz-agent",
 	"productName": "Dproz Agent",
-	"version": "0.3.1",
+	"version": "0.3.2",
 	"description": "A local background agent that finds jobs and applies to them for you.",
 	"private": true,
 	"type": "module",

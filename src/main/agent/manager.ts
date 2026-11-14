@@ -71,6 +71,8 @@ class AgentManager {
 	private answersTimer: NodeJS.Timeout | null = null;
 	private delegations = new Map<string, Delegation>();
 	private paused = false;
+	/** The user has the agent's browser open, and its profile cannot be open twice. */
+	private held = false;
 	private intervalHours = 6;
 
 	async load() {
@@ -94,6 +96,7 @@ class AgentManager {
 			active,
 			step: this.delegations.get(COORDINATOR)?.step,
 			paused: this.paused,
+			browserOpen: this.held,
 			nextSweepAt: this.nextSweepAt(),
 		};
 	}
@@ -130,7 +133,7 @@ class AgentManager {
 	answersArrived() {
 		if (this.answersTimer) clearTimeout(this.answersTimer);
 		this.answersTimer = setTimeout(async () => {
-			if (this.status !== "idle" || this.paused || !(await hasUndeliveredAnswers())) return;
+			if (this.status !== "idle" || this.paused || this.held || !(await hasUndeliveredAnswers())) return;
 			this.enqueue({ label: "Using your answers", key: "answers", prompt: answersPrompt });
 		}, ANSWER_SETTLE_MS);
 	}
@@ -141,6 +144,23 @@ class AgentManager {
 		if (paused) this.stop();
 		this.publishState();
 		if (paused || this.status !== "idle") return;
+		const waiting = this.queue.shift();
+		if (waiting) void this.run(waiting);
+		else void this.tick();
+	}
+
+	/** Hold all work while the user has the agent's browser. False when a run is using the browser now. */
+	holdForBrowser() {
+		if (this.status !== "idle") return false;
+		this.held = true;
+		this.publishState();
+		return true;
+	}
+
+	releaseBrowser() {
+		this.held = false;
+		this.publishState();
+		if (this.paused || this.status !== "idle") return;
 		const waiting = this.queue.shift();
 		if (waiting) void this.run(waiting);
 		else void this.tick();
@@ -167,7 +187,7 @@ class AgentManager {
 
 	private async tick() {
 		const settings = await getSettings();
-		if (!settings.onboarded || this.paused) return;
+		if (!settings.onboarded || this.paused || this.held) return;
 		if (this.status !== "idle" || this.queue.length > 0) return;
 		if (await hasUndeliveredAnswers()) return this.answersArrived();
 		const next = this.nextSweepAt();
@@ -177,7 +197,7 @@ class AgentManager {
 
 	private enqueue(request: RunRequest) {
 		if (request.key && this.queue.some((queued) => queued.key === request.key)) return;
-		if (this.status === "idle" && !this.paused) void this.run(request);
+		if (this.status === "idle" && !this.paused && !this.held) void this.run(request);
 		else {
 			this.queue.push(request);
 			this.publishState();
@@ -248,7 +268,7 @@ class AgentManager {
 		this.runLabel = undefined;
 		this.delegations.clear();
 		void writeJson(stateFile(), this.persisted);
-		const next = this.paused ? undefined : this.queue.shift();
+		const next = this.paused || this.held ? undefined : this.queue.shift();
 		this.publishState();
 		if (next) void this.run(next);
 		else void this.tick();

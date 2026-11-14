@@ -91,6 +91,8 @@ export type AgentState = {
 	active: Record<string, string>;
 	step?: string;
 	paused: boolean;
+	/** The user has the agent's browser open to sign in, so the agent is waiting for it. */
+	browserOpen: boolean;
 	nextSweepAt?: string;
 };
 
@@ -195,6 +197,11 @@ export type DeskApi = {
 		setEndpointModel(model: string): Promise<SetupStatus>;
 		clearConnection(): Promise<SetupStatus>;
 	};
+	browser: {
+		/** Opens the agent's own browser for the user to sign in to sites. The agent waits until it is closed. */
+		open(url?: string): Promise<{ ok: true } | { ok: false; reason: string }>;
+		close(): Promise<void>;
+	};
 	updates: {
 		status(): Promise<UpdateInfo>;
 		check(): Promise<UpdateInfo>;
@@ -231,6 +238,7 @@ export const DESK_METHODS = {
 	agent: ["state", "activity", "onboard", "documentsAdded", "linksAdded", "setPaused", "stop"],
 	help: ["current", "respond"],
 	claude: ["setApiKey", "setEndpoint", "endpointModels", "setEndpointModel", "clearConnection"],
+	browser: ["open", "close"],
 	updates: ["status", "check", "download", "install"],
 	shell: ["openExternal", "open"],
 } as const satisfies { [Area in RemoteAreas]: readonly (keyof DeskApi[Area])[] };

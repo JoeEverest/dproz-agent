@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -30,7 +30,7 @@ export function bundledClaudeBinary(): string | undefined {
 export const browsersPath = () =>
 	process.env.DPROZ_AGENT_BROWSERS_PATH ?? path.join(app.getPath("userData"), "browsers");
 
-const browserProfileDir = () => path.join(app.getPath("userData"), "browser-profile");
+export const browserProfileDir = () => path.join(app.getPath("userData"), "browser-profile");
 
 const nodeEnv = () => ({ ELECTRON_RUN_AS_NODE: "1", PLAYWRIGHT_BROWSERS_PATH: browsersPath() });
 
@@ -45,6 +45,19 @@ export async function isBrowserInstalled() {
 	} catch {
 		return false;
 	}
+}
+
+/** Where the downloaded Chromium's program is, asked of Playwright, which names it differently per platform. */
+export function browserExecutable(): Promise<string> {
+	const script = "process.stdout.write(require(process.argv[1]).chromium.executablePath())";
+	return new Promise((resolve, reject) => {
+		execFile(
+			process.execPath,
+			["-e", script, path.dirname(playwrightCore("package.json"))],
+			{ env: { ...process.env, ...nodeEnv() } },
+			(failure, stdout) => (failure || !stdout ? reject(failure ?? new Error("No browser found")) : resolve(stdout)),
+		);
+	});
 }
 
 let installing: Promise<void> | null = null;

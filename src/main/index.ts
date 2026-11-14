@@ -7,6 +7,7 @@ import { registerIpc } from "./ipc";
 import { notifyStatus } from "./notify";
 import { registerPreviewScheme, servePreviews } from "./preview";
 import { startUpdateChecks } from "./updates";
+import { closeUserBrowser } from "./userBrowser";
 import { ensureWorkspace } from "./workspace";
 
 if (process.env.DPROZ_AGENT_USER_DATA) {
@@ -101,6 +102,7 @@ if (!app.requestSingleInstanceLock()) {
 	app.on("before-quit", () => {
 		quitting = true;
 		agent.stop();
+		closeUserBrowser();
 	});
 	app.on("activate", showWindow);
 	app.on("window-all-closed", () => {

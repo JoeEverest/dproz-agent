@@ -81,6 +81,7 @@ inbox.json               general questions the agent has asked you
 ### Profile settings and Settings
 
 - **Profile settings** (sidebar): the documents and links the agent holds on you, what it knows about you (`about-me.md`, editable in the app), and site logins. Logins are encrypted with the system keychain (Keychain on macOS, the Secret Service on Linux); on a Linux machine with no keyring the page says so.
+- **The agent's browser** (Profile settings → Site logins → Open browser): the agent drives its own Chromium and keeps its profile between runs. This button opens that same browser for you, so you can sign in to your email and job sites once by hand. The agent starts nothing while it is open and finds itself signed in afterwards. With your webmail signed in there, it also picks up the verification codes and confirmation links that sites email you, instead of asking you for them.
 - **Settings** (gear, bottom of the sidebar): send automatically (on by default; off means every application waits at Ready to submit and the browser can read but not click, type or upload), how often it searches, the model, and the installed version.
 
 ### Updates
@@ -109,11 +110,12 @@ node tests/e2e/run.mjs platform       # setup, board, questions panel, drawer, s
 node tests/e2e/run.mjs gallery        # screenshots of every screen, light and dark, with demo cards
 node tests/e2e/run.mjs full           # the whole autonomous flow against a local mock jobs feed and careers portal
 node tests/e2e/run.mjs links          # the agent reads a linked page into about-me.md, against a local page
+node tests/e2e/run.mjs browser        # you sign in through the agent's browser, then its next run is signed in (opens a Chromium window)
 npm run pack && node tests/e2e/run.mjs packaged   # the packaged app, including a prepare-only agent run
 ./tests/e2e/linux.sh                  # builds and runs the platform test on Linux in Docker
 ```
 
-`full`, `links` and `packaged` use your Claude account. They set `DPROZ_AGENT_TEST_ORIGIN` and point `DPROZ_API_URL` at the mock, which restricts the agent's browser to the mock portal and removes the web tools, so a test with a fictional candidate cannot reach a real employer. Test sandboxes also start paused unless a test turns that off. Keep both in place for any test that lets the agent run.
+`full`, `links`, `browser` and `packaged` use your Claude account. They set `DPROZ_AGENT_TEST_ORIGIN` and point `DPROZ_API_URL` at the mock, which restricts the agent's browser to the mock portal and removes the web tools, so a test with a fictional candidate cannot reach a real employer. Test sandboxes also start paused unless a test turns that off. Keep both in place for any test that lets the agent run.
 
 ## Packaging and releases
 

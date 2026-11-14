@@ -1,8 +1,9 @@
 import type { LinkAdded, Settings, SetupStatus, UpdateInfo, WorkspaceDocument } from "@shared/ipc";
 import { linkParts } from "@shared/links";
 import { PasswordInput, PasswordInputControl, PasswordInputToggle } from "@ui-sdk/react/password-input";
-import { Eye, EyeOff, FileText, KeyRound, Link2, Pencil, Plus, ShieldAlert, Trash2, Upload } from "lucide-react";
+import { Eye, EyeOff, FileText, Globe, KeyRound, Link2, Pencil, Plus, ShieldAlert, Trash2, Upload } from "lucide-react";
 import { type DragEvent, type FormEvent, type ReactNode, useState } from "react";
+import { useAgentState } from "../lib/agent";
 import { fileSize, relativeTime } from "../lib/format";
 import { useResource } from "../lib/hooks";
 import { droppedLink, LinkField } from "./Documents";
@@ -238,6 +239,13 @@ function LoginsGroup() {
 	const list = credentials.data ?? [];
 	const storage = setup.data?.credentialStorage;
 	const complete = Boolean(form.site.trim() && form.username.trim() && form.password);
+	const agent = useAgentState();
+	const [browserNote, setBrowserNote] = useState<string | null>(null);
+
+	const openBrowser = async () => {
+		const opened = await window.desk.browser.open();
+		setBrowserNote(opened.ok ? null : opened.reason);
+	};
 
 	const save = async (event: FormEvent) => {
 		event.preventDefault();
@@ -254,7 +262,7 @@ function LoginsGroup() {
 	return (
 		<Group
 			title="Site logins"
-			note="Accounts on job sites. The agent signs in with these and saves its own when a site makes it register. Passwords are encrypted on this computer."
+			note="How the agent gets into your accounts: sign in yourself in its browser, or save a login for it to use. It saves its own when a site makes it register. Passwords are encrypted on this computer."
 			action={
 				!adding && (
 					<Button size="sm" icon={<Plus size={13} strokeWidth={2} aria-hidden />} onClick={() => setAdding(true)}>
@@ -263,6 +271,30 @@ function LoginsGroup() {
 				)
 			}
 		>
+			<Row
+				title="The agent's browser"
+				note={
+					browserNote ??
+					(agent.browserOpen
+						? "Open now. The agent waits until you close it, then finds itself signed in."
+						: "Sign in to your email and job sites here once. The agent uses this same browser, so it stays signed in and can pick up the codes sites email you.")
+				}
+				control={
+					agent.browserOpen ? (
+						<Button size="sm" onClick={() => void window.desk.browser.close()}>
+							Close browser
+						</Button>
+					) : (
+						<Button
+							size="sm"
+							icon={<Globe size={13} strokeWidth={1.75} aria-hidden />}
+							onClick={() => void openBrowser()}
+						>
+							Open browser
+						</Button>
+					)
+				}
+			/>
 			{storage && !storage.encrypted && (
 				<div className="border-b border-line p-2">
 					<Notice tone="attention" icon={<ShieldAlert size={16} strokeWidth={1.75} aria-hidden />}>
