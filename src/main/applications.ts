@@ -6,9 +6,6 @@ import {
 	type Application,
 	type ApplicationStatus,
 	applicationSchema,
-	type Fact,
-	type FactCorrection,
-	factSchema,
 	haveAnswer,
 	type Question,
 	type QuestionReply,
@@ -203,86 +200,15 @@ export function applyReply(question: Question, reply: QuestionReply): Question {
 	return settled({ answer: text });
 }
 
-export async function listFacts(): Promise<Fact[]> {
-	const { facts } = await workspacePaths();
-	const stored = z
-		.array(factSchema)
-		.catch([])
-		.parse(await readJson<unknown>(facts, []));
-	// Facts kept before they could be edited have no id. Give each one, once.
-	if (stored.every((fact) => fact.id)) return stored;
-	const named = stored.map((fact) => (fact.id ? fact : { ...fact, id: randomUUID() }));
-	await writeJson(facts, named);
-	return named;
-}
-
 /**
- * Corrects one fact. Returns the list and a line saying what changed, for the agent to act on.
- * The change is not copied back to the card that asked: its history stays as it was answered.
+ * Gives a quick question's answer to the same question wherever else it is waiting, so the user
+ * answers a requirement once however many jobs ask for it.
  */
-export function correctFact(id: string, correction: FactCorrection): Promise<{ facts: Fact[]; change: string | null }> {
-	return serialized(async () => {
-		const { facts } = await workspacePaths();
-		const all = await listFacts();
-		const before = all.find((fact) => fact.id === id);
-		const answer = correction.answer.trim();
-		if (!before || !answer || (before.answer === answer && before.have === correction.have)) {
-			return { facts: all, change: null };
-		}
-		const after = { ...before, answer, have: correction.have, correctedAt: now() };
-		const next = all.map((fact) => (fact.id === id ? after : fact));
-		await writeJson(facts, next);
-		const subject = before.item ?? before.question;
-		return { facts: next, change: `${subject}: they first said "${before.answer}". The right answer is "${answer}".` };
-	});
-}
-
-/** Forgets one fact, so the agent may ask again. */
-export function removeFact(id: string): Promise<{ facts: Fact[]; change: string | null }> {
-	return serialized(async () => {
-		const { facts } = await workspacePaths();
-		const all = await listFacts();
-		const gone = all.find((fact) => fact.id === id);
-		if (!gone) return { facts: all, change: null };
-		const next = all.filter((fact) => fact.id !== id);
-		await writeJson(facts, next);
-		const subject = gone.item ?? gone.question;
-		return {
-			facts: next,
-			change: `${subject}: they said "${gone.answer}" and have now withdrawn that answer. Treat it as unknown.`,
-		};
-	});
-}
-
-/** The fact that already settles a quick question, if the user has answered it before. */
-export async function knownFact(item: string) {
-	return (await listFacts()).findLast((fact) => sameItem(fact.item, item));
-}
-
-/**
- * Keeps a settled answer as a fact, and gives the same answer to the same quick question wherever
- * else it is waiting, so the user answers a requirement once however many jobs ask for it.
- */
-async function settle(asked: Question, about?: string) {
-	// "I have it" is a fact from the moment it is clicked, whether or not the follow-up gets an answer.
+async function shareAnswer(asked: Question) {
+	// "I have it" counts from the moment it is clicked, whether or not the follow-up gets an answer.
 	const question = !asked.answer && asked.item && asked.have ? { ...asked, answer: haveAnswer(true) } : asked;
-	if (!question.answer) return;
-	const { facts } = await workspacePaths();
-	const { item, category, have, answer } = question;
-	const fact = factSchema.parse({
-		id: randomUUID(),
-		at: now(),
-		question: question.question,
-		answer,
-		item,
-		category,
-		have,
-		about,
-	});
-	// One fact for each requirement: a later answer replaces an earlier one.
-	const kept = (await listFacts()).filter((earlier) => !item || !sameItem(earlier.item, item));
-	await writeJson(facts, [...kept, fact]);
-	if (!item) return;
+	const { item, have, answer } = question;
+	if (!answer || !item) return;
 
 	const waiting = (other: Question) => other.id !== question.id && !other.answer && sameItem(other.item, item);
 	const copy = (other: Question) =>
@@ -314,7 +240,7 @@ export function answerApplicationQuestion(id: string, questionId: string, reply:
 		);
 		const saved = await persist({ ...current, questions }, current.status);
 		const answered = questions.find((question) => question.id === questionId);
-		if (answered) await settle(answered, `${current.title} at ${current.company}`);
+		if (answered) await shareAnswer(answered);
 		return saved;
 	});
 }
@@ -350,7 +276,7 @@ export function answerInboxQuestion(questionId: string, reply: QuestionReply): P
 		);
 		await saveInbox(questions);
 		const answered = questions.find((question) => question.id === questionId);
-		if (answered) await settle(answered);
+		if (answered) await shareAnswer(answered);
 		return listInbox();
 	});
 }
@@ -387,6 +313,33 @@ export function collectUndeliveredAnswers(): Promise<AnsweredQuestion[]> {
 		}
 		return answers;
 	});
+}
+
+export type AskedQuestion = { question: string; answer: string | null; application?: string };
+
+/**
+ * Everything the agent has asked, newest last, with the answer if there is one. This is how it knows
+ * not to ask again: nothing about its questions is written into the user's master resume.
+ */
+export async function listAsked(limit = 60): Promise<AskedQuestion[]> {
+	const [inbox, applications] = await Promise.all([listInbox(), listApplications()]);
+	const asked = [
+		...inbox.map((question) => ({ question, application: undefined as string | undefined })),
+		...applications.flatMap((application) =>
+			application.questions.map((question) => ({
+				question,
+				application: `${application.title} at ${application.company}`,
+			})),
+		),
+	];
+	return asked
+		.sort((a, b) => a.question.askedAt.localeCompare(b.question.askedAt))
+		.slice(-limit)
+		.map(({ question, application }) => ({
+			question: question.item ? `Do you have this: ${question.item}?` : question.question,
+			answer: question.answer ?? null,
+			...(application ? { application } : {}),
+		}));
 }
 
 let stopWatching: (() => void) | null = null;

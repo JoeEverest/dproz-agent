@@ -44,7 +44,7 @@ import {
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 import { deadline, hostOf, relativeTime } from "../lib/format";
 import { fitLabel, statusIcon } from "./Board";
-import { DocumentPreview } from "./DocumentPreview";
+import { cardDocument, DocumentPreview } from "./DocumentPreview";
 import { Markdown } from "./Markdown";
 import { QuestionForm } from "./QuestionForm";
 import { Button, buttonClass, Chip, IconButton, Picker } from "./ui";
@@ -222,7 +222,14 @@ export function ApplicationDrawer({ application, liveStep, onClose, onChanged }:
 						}}
 						className="preview-panel absolute top-0 right-full flex h-full w-(--preview) flex-col bg-canvas shadow-sheet"
 					>
-						<DocumentPreview applicationId={shown.id} document={inPanel} onClose={closePreview} />
+						<DocumentPreview
+							file={inPanel.file}
+							label={inPanel.label}
+							source={cardDocument(shown.id, inPanel.file)}
+							elsewhere="open it from the card's folder"
+							onDownload={() => void window.desk.applications.saveDocument(shown.id, inPanel.file)}
+							onClose={closePreview}
+						/>
 					</aside>
 				)}
 				{shown && (

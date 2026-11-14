@@ -3,7 +3,7 @@ import path from "node:path";
 import { query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { ActivityItem, AgentState } from "@shared/ipc";
 import { app } from "electron";
-import { hasUndeliveredAnswers } from "../applications";
+import { hasUndeliveredAnswers, listApplications } from "../applications";
 import { claudeEnvironment } from "../claude";
 import { connectionModel } from "../connection";
 import { broadcast } from "../events";
@@ -14,14 +14,15 @@ import { getSettings, updateSettings } from "../settings";
 import { deskServer } from "../tools/desk";
 import { dprozServer } from "../tools/dproz";
 import { ensureWorkspace } from "../workspace";
+import { changedLines } from "./changes";
 import { describeTool } from "./describeTool";
 import {
 	addJobPrompt,
 	answersPrompt,
-	correctionsPrompt,
 	documentsPrompt,
 	linksPrompt,
 	onboardingPrompt,
+	profileEditedPrompt,
 	subagents,
 	submitPrompt,
 	sweepPrompt,
@@ -36,8 +37,9 @@ type Delegation = { applicationId?: string; step: string };
 
 const ACTIVITY_LIMIT = 400;
 const ANSWER_SETTLE_MS = 6000;
-// Longer than for answers: someone correcting one answer is often about to correct another.
-const CORRECTION_SETTLE_MS = 20_000;
+// Longer than for answers: someone who has saved one edit is often about to make another.
+const EDIT_SETTLE_MS = 20_000;
+
 const COORDINATOR = "coordinator";
 const UNUSED_TOOLS = [
 	"AskUserQuestion",
@@ -72,8 +74,8 @@ class AgentManager {
 	private persisted: Persisted = {};
 	private saveTimer: NodeJS.Timeout | null = null;
 	private answersTimer: NodeJS.Timeout | null = null;
-	private corrections: string[] = [];
-	private correctionsTimer: NodeJS.Timeout | null = null;
+	private editedFrom: string | null = null;
+	private editTimer: NodeJS.Timeout | null = null;
 	private delegations = new Map<string, Delegation>();
 	private paused = false;
 	/** The user has the agent's browser open, and its profile cannot be open twice. */
@@ -136,16 +138,20 @@ class AgentManager {
 	}
 
 	/**
-	 * The user corrected or withdrew something they had told the agent. The corrections of one sitting
-	 * are gathered and handled in one run.
+	 * The user edited their master resume. The edits of one sitting are gathered, and if the board has
+	 * cards the agent checks whether any of them relied on what changed.
 	 */
-	factsCorrected(change: string) {
-		this.corrections.push(change);
-		if (this.correctionsTimer) clearTimeout(this.correctionsTimer);
-		this.correctionsTimer = setTimeout(() => {
-			const changes = this.corrections.splice(0);
-			if (changes.length) this.enqueue({ label: "Using your corrections", prompt: correctionsPrompt(changes) });
-		}, CORRECTION_SETTLE_MS);
+	profileEdited(before: string, after: string) {
+		this.editedFrom ??= before;
+		const from = this.editedFrom;
+		if (this.editTimer) clearTimeout(this.editTimer);
+		this.editTimer = setTimeout(async () => {
+			this.editedFrom = null;
+			const change = changedLines(from, after);
+			if (!change.removed.length && !change.added.length) return;
+			if ((await listApplications()).length === 0) return;
+			this.enqueue({ label: "Using your changes", prompt: profileEditedPrompt(change.removed, change.added) });
+		}, EDIT_SETTLE_MS);
 	}
 
 	answersArrived() {

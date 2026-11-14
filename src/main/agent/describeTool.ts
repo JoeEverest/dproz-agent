@@ -61,7 +61,6 @@ const describers: Record<string, (input: Input) => string> = {
 	request_browser_help: (input) => `Waiting for you: ${text(input.instruction, 80)}`,
 	render_pdf: (input) => `Render ${fileName(input.pdf ?? input.html)}`,
 	render_resume: (input) => `Write ${fileName(input.pdf)}`,
-	save_master_resume: () => "Update your master resume",
 	browser_navigate: (input) => `Open ${host(input.url)}`,
 	browser_navigate_back: () => "Go back",
 	browser_snapshot: () => "Read the page",

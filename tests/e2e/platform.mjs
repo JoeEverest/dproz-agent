@@ -226,14 +226,6 @@ try {
 		elsewhere.have === true && elsewhere.answer === "I have it.",
 		elsewhere.answer,
 	);
-	const facts = JSON.parse(await fs.readFile(path.join(sandbox.workspace, "facts.json"), "utf8"));
-	check(
-		"every answer is kept as a fact",
-		facts.some((fact) => fact.item === "Power BI" && fact.have && /3 days to 1/.test(fact.answer)) &&
-			facts.some((fact) => /CPA/.test(fact.item ?? "") && fact.have === false) &&
-			facts.some((fact) => fact.answer === "Yes, class B"),
-		`${facts.length} facts`,
-	);
 	await shot(window, `platform-${process.platform}-answered`);
 	const withOneMore = JSON.parse(await fs.readFile(path.join(folder, "application.json"), "utf8"));
 	withOneMore.questions.push(quick("q5", "SAP", "skills"));
@@ -316,7 +308,8 @@ try {
 		JSON.stringify(storage),
 	);
 
-	await nav("Profile settings").click();
+	// Site logins are a setting. Profile settings is the master resume and the user's documents.
+	await window.getByRole("navigation").getByRole("button", { name: "Settings", exact: true }).click();
 	await window.getByText("careers.example.com", { exact: true }).scrollIntoViewIfNeeded();
 	await window.waitForTimeout(4000);
 	check("the saved login is listed in settings", true);
@@ -336,6 +329,7 @@ try {
 	await window.getByRole("button", { name: "Close browser" }).click();
 	check("and closing it hands the browser back to the agent", await waitFor(async () => !(await browserOpen())));
 
+	await nav("Profile settings").click();
 	const origin = new URL(updateUrl).origin;
 	const linkField = window.getByRole("textbox", { name: "Link to a page or file about you" });
 	const addLink = window.getByRole("button", { name: "Add link" });
@@ -370,42 +364,74 @@ try {
 	await window.getByRole("button", { name: /Remove the link to/ }).waitFor({ state: "detached" });
 	check("a link can be removed", (await savedLinks()).length === 0);
 
-	// Answers can be corrected, and the agent is told what changed.
-	const answers = window.getByRole("region", { name: "Your answers" });
-	await answers.scrollIntoViewIfNeeded();
-	await answers.getByText("Power BI", { exact: true }).waitFor({ timeout: 10_000 });
-	const savedFacts = async () => JSON.parse(await fs.readFile(path.join(sandbox.workspace, "facts.json"), "utf8"));
+	// The user's own files open in the same preview panel as a card's documents.
+	await window.getByRole("button", { name: "Preview Rehema Kisanga CV.pdf" }).click();
+	const ownPreview = window.getByRole("complementary", { name: "Preview of Rehema Kisanga CV.pdf" });
+	const ownSource = await ownPreview.locator("iframe").getAttribute("src", { timeout: 10_000 });
+	const [ownStatus, ownStart] = await served(ownSource.split("#")[0]);
 	check(
-		"every answer is listed in Profile settings",
-		(await answers.getByRole("listitem").count()) === (await savedFacts()).length,
-		`${await answers.getByRole("listitem").count()} answers`,
+		"one of the user's documents opens as a preview beside the list",
+		ownStatus === 200 && ownStart === "%PDF",
+		ownSource,
 	);
-	console.log(await shot(window, `platform-${process.platform}-answers`));
-	await answers.getByRole("button", { name: "Correct your answer about Power BI" }).click();
-	await answers.getByRole("combobox", { name: "Do you have this: Power BI" }).click();
-	await window.getByRole("option", { name: "I do not have it" }).click();
-	console.log(await shot(window, `platform-${process.platform}-answer-edit`));
-	await answers.getByRole("button", { name: "Save" }).click();
-	await answers.getByText("Saved. The agent will act on it").waitFor({ timeout: 10_000 });
-	const corrected = (await savedFacts()).find((fact) => fact.item === "Power BI");
+	console.log(await shot(window, `platform-${process.platform}-own-preview`));
+	await ownPreview.getByRole("button", { name: "Download" }).click();
+	await window.waitForTimeout(800);
+	const ownCopy = await fs.readFile(path.join(saveTo, "Rehema Kisanga CV.pdf"), "utf8").catch(() => "");
+	check("Download saves a copy of it", ownCopy === "%PDF-1.4 test");
+	await ownPreview.getByRole("button", { name: "Close the preview" }).click();
+	await ownPreview.waitFor({ state: "detached" });
+
+	// The master resume is edited in place, and the agent is told what changed.
+	const record = window.getByRole("region", { name: "Your master resume" });
+	const page = record.getByRole("textbox", { name: "Your master resume" });
+	await page.getByRole("heading", { name: "Other facts" }).waitFor({ timeout: 10_000 });
+	const aboutMeFile = path.join(sandbox.workspace, "about-me.md");
+	const onDisk = () => fs.readFile(aboutMeFile, "utf8");
+	const toLineEnd = process.platform === "darwin" ? "Meta+ArrowRight" : "End";
+	const saveButton = window.getByRole("button", { name: "Save", exact: true });
+	const savedNote = window.getByRole("status").filter({ hasText: /^Saved/ });
 	check(
-		"a corrected answer replaces the old one",
-		corrected.have === false && corrected.answer === "I do not have it." && Boolean(corrected.correctedAt),
-		corrected.answer,
+		"the master resume is shown as a document, section by section",
+		(await page.getByRole("heading").count()) >= 12,
 	);
-	await answers.getByRole("button", { name: "Correct your answer about Do you hold a driving licence?" }).click();
-	await answers.getByRole("textbox", { name: "Do you hold a driving licence?" }).fill("Yes, class B and C");
-	await answers.getByRole("button", { name: "Save" }).click();
-	await answers.getByText("Yes, class B and C").waitFor({ timeout: 10_000 });
-	const factCount = (await savedFacts()).length;
-	await answers.getByRole("button", { name: "Remove your answer about SAP" }).click();
-	await answers.getByText("SAP", { exact: true }).waitFor({ state: "detached" });
+	console.log(await shot(window, `platform-${process.platform}-master-resume`));
+
+	// An empty section says what belongs in it. Clicking that starts a line to type on.
+	const hint = page.getByText("Things that matter to some jobs and not others");
+	await hint.scrollIntoViewIfNeeded();
+	await hint.click();
+	await window.waitForTimeout(300);
+	await window.getByRole("button", { name: "Bullet list" }).click();
+	await window.keyboard.type("Class B driving licence, valid to 2029");
+	await window.waitForTimeout(300);
+	console.log(await shot(window, `platform-${process.platform}-master-resume-edit`));
+	await saveButton.click();
+	await savedNote.waitFor({ timeout: 10_000 });
+	const afterEdit = await onDisk();
 	check(
-		"an answer can be reworded or removed",
-		(await savedFacts()).length === factCount - 1 &&
-			(await savedFacts()).some((fact) => fact.answer === "Yes, class B and C"),
+		"an edit is saved as Markdown, in the section it was made in, and the hints are not",
+		/## Other facts\n\n[-*] Class B driving licence, valid to 2029\n\n## Do not have/.test(afterEdit) &&
+			afterEdit.includes("## Experience") &&
+			!afterEdit.includes("Things that matter"),
+		afterEdit.slice(afterEdit.indexOf("## Other facts"), afterEdit.indexOf("## Standard answers")).trim(),
 	);
-	// The corrections of one sitting are gathered into one run, which waits while the agent is paused.
+
+	// The agent writes to the file while the user has an unsaved edit: neither is lost without a choice.
+	await page.getByText("Class B driving licence, valid to 2029").click();
+	await window.waitForTimeout(300);
+	await window.keyboard.press(toLineEnd);
+	await window.keyboard.type(", and class C");
+	await window.waitForTimeout(300);
+	await fs.writeFile(aboutMeFile, `${afterEdit}\n- Sage 300\n`);
+	await saveButton.click();
+	await record.getByText("The agent added to this while you were editing").waitFor({ timeout: 10_000 });
+	check("a save does not overwrite what the agent wrote meanwhile", (await onDisk()).includes("- Sage 300"));
+	await record.getByRole("button", { name: "Save mine over it" }).click();
+	await savedNote.waitFor({ timeout: 10_000 });
+	check("the user can choose their version", /valid to 2029, and class C/.test(await onDisk()));
+
+	// The edits of one sitting are gathered into one run, which waits while the agent is paused.
 	const waitForRun = async () => {
 		for (let waited = 0; waited < 40_000; waited += 1000) {
 			if ((await window.evaluate(() => window.desk.agent.state())).queued === 3) return true;
@@ -413,7 +439,7 @@ try {
 		}
 		return false;
 	};
-	check("the agent is handed the corrections in one run", await waitForRun());
+	check("the agent is handed the edit in one run", await waitForRun());
 
 	await window.getByRole("navigation").getByRole("button", { name: "Settings", exact: true }).click();
 	await window.getByRole("heading", { name: "Settings", exact: true }).waitFor();

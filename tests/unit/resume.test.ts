@@ -128,12 +128,6 @@ describe("reviewResume", () => {
 		expect(notesFor("- Completed CPA Level I and trained 340 staff")).not.toContain("first person");
 	});
 
-	it("keeps the summary in the first person when the user's own resume is", () => {
-		const mine = { ...resume, summary: "I am an accountant with 6 years in manufacturing finance." };
-		expect(reviewResume(mine, { aboutMe }).join("\n")).toContain("first person");
-		expect(reviewResume(mine, { aboutMe, master: mine }).join("\n")).not.toContain("first person");
-	});
-
 	it("catches a figure the user never gave", () => {
 		const notes = notesFor("- Cut costs by 35% across 340 staff");
 		expect(notes).toContain("gives 35");
@@ -151,7 +145,6 @@ describe("reviewResume", () => {
 		};
 		const notes = reviewResume(tailored, {
 			aboutMe,
-			master: resume,
 			job,
 			company: "Twiga Cement",
 			jobTitle: "Finance Controller",
@@ -163,7 +156,6 @@ describe("reviewResume", () => {
 		expect(notes).toContain('"Tanzanian citizen" is a condition of eligibility');
 		expect(notes).toContain('"Teamwork" is a personal quality');
 		expect(notes).toContain("is requirement text, not the name of a skill");
-		// Skills the user already listed are theirs to keep.
 		expect(notes).not.toContain('"IFRS"');
 	});
 });

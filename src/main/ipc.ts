@@ -8,13 +8,10 @@ import {
 	answerApplicationQuestion,
 	answerInboxQuestion,
 	applicationFolder,
-	correctFact,
 	listApplications,
-	listFacts,
 	listInbox,
 	patchApplication,
 	removeApplication,
-	removeFact,
 	watchApplications,
 } from "./applications";
 import { claudeStatus } from "./claude";
@@ -92,11 +89,23 @@ const handlers: Handlers = {
 			return result.canceled ? listDocuments() : addDocuments(result.filePaths);
 		},
 		remove: removeDocument,
+		save: async (name) => {
+			const { documents } = await workspacePaths();
+			const source = path.resolve(documents, name);
+			return isInside(documents, source) && source !== documents ? saveCopy(source) : null;
+		},
 		links: listLinks,
 		addLink,
 		removeLink,
 	},
-	profile: { read: readAboutMe, write: writeAboutMe },
+	profile: {
+		read: readAboutMe,
+		write: async (content, base) => {
+			const result = await writeAboutMe(content, base);
+			if (result.saved) agent.profileEdited(result.previous, content);
+			return result;
+		},
+	},
 	applications: {
 		list: listApplications,
 		setStatus: (id, status) => patchApplication(id, { status }),
@@ -117,15 +126,7 @@ const handlers: Handlers = {
 		saveDocument: async (id, file) => {
 			const folder = await applicationFolder(id);
 			const source = path.resolve(folder, file);
-			if (!isInside(folder, source)) return null;
-			const suggested = path.join(process.env.DPROZ_AGENT_SAVE_TO ?? app.getPath("downloads"), path.basename(source));
-			// Tests name a folder instead of driving the system's save dialog.
-			const chosen = process.env.DPROZ_AGENT_SAVE_TO
-				? suggested
-				: (await dialog.showSaveDialog({ title: "Save a copy", defaultPath: suggested })).filePath;
-			if (!chosen) return null;
-			await fs.copyFile(source, chosen);
-			return chosen;
+			return isInside(folder, source) ? saveCopy(source) : null;
 		},
 		submit: (id) => agent.submit(id),
 		addJob: (source, prepareOnly) => agent.addJob(source, prepareOnly),
@@ -136,19 +137,6 @@ const handlers: Handlers = {
 			const inbox = await answerInboxQuestion(questionId, answer);
 			agent.answersArrived();
 			return inbox;
-		},
-	},
-	facts: {
-		list: listFacts,
-		correct: async (id, correction) => {
-			const { facts, change } = await correctFact(id, correction);
-			if (change) agent.factsCorrected(change);
-			return facts;
-		},
-		remove: async (id) => {
-			const { facts, change } = await removeFact(id);
-			if (change) agent.factsCorrected(change);
-			return facts;
 		},
 	},
 	credentials: { list: listCredentials, save: saveCredential, remove: removeCredential },
@@ -197,6 +185,17 @@ const handlers: Handlers = {
 		},
 	},
 };
+
+/** Copies a file to where the user chooses. Tests name a folder instead of driving the save dialog. */
+async function saveCopy(source: string) {
+	const suggested = path.join(process.env.DPROZ_AGENT_SAVE_TO ?? app.getPath("downloads"), path.basename(source));
+	const chosen = process.env.DPROZ_AGENT_SAVE_TO
+		? suggested
+		: (await dialog.showSaveDialog({ title: "Save a copy", defaultPath: suggested })).filePath;
+	if (!chosen) return null;
+	await fs.copyFile(source, chosen);
+	return chosen;
+}
 
 export function registerIpc() {
 	for (const [area, methods] of Object.entries(handlers)) {

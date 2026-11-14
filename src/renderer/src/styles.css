@@ -310,6 +310,114 @@ button {
 	font-weight: 600;
 }
 
+/*
+ * The master resume, edited in place. It is set like the resumes printed from it: section headings in
+ * small capitals over a rule, a bold line for each job, and plain bullets. With one text size across
+ * the app, a section is set apart by its rule and the space above it, not by larger type.
+ */
+.master-record {
+	min-height: 320px;
+	outline: none;
+	font-size: 13px;
+	line-height: 1.65;
+	color: var(--ink);
+	caret-color: var(--accent);
+}
+
+.master-record ::selection {
+	background: var(--accent-soft);
+}
+
+.master-record > :first-child {
+	margin-top: 0;
+}
+
+.master-record p {
+	margin: 0 0 6px;
+}
+
+.master-record h1 {
+	margin: 0 0 4px;
+	font-size: 14px;
+	font-weight: 600;
+	letter-spacing: -0.005em;
+}
+
+.master-record h2 {
+	margin: 30px 0 10px;
+	padding-bottom: 6px;
+	border-bottom: 1px solid var(--line-strong);
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	color: var(--ink);
+}
+
+.master-record h3 {
+	margin: 16px 0 4px;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.master-record h2 + h3 {
+	margin-top: 12px;
+}
+
+.master-record ul,
+.master-record ol {
+	margin: 0 0 8px;
+	padding-left: 18px;
+}
+
+.master-record ul {
+	list-style: disc;
+}
+
+.master-record ol {
+	list-style: decimal;
+}
+
+.master-record li {
+	margin-bottom: 3px;
+	padding-left: 2px;
+}
+
+.master-record li > p {
+	margin: 0;
+}
+
+.master-record li::marker {
+	color: var(--ink-3);
+}
+
+.master-record strong {
+	font-weight: 600;
+}
+
+.master-record a {
+	color: var(--accent-ink);
+	text-decoration: underline;
+	text-decoration-thickness: 1px;
+	text-underline-offset: 3px;
+}
+
+/* What belongs in a section that is still empty. Not part of the document. */
+.master-record .section-hint {
+	margin: 0 0 6px;
+	color: var(--ink-4);
+	cursor: text;
+	user-select: none;
+}
+
+.master-record .section-empty::before {
+	float: left;
+	height: 0;
+	color: var(--ink-4);
+	content: attr(data-hint);
+	pointer-events: none;
+}
+
 .prose-agent hr {
 	margin: 12px 0;
 	border: 0;

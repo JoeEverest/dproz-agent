@@ -116,24 +116,6 @@ export type QuestionReply = string | { have: boolean };
 export const awaitingChoice = (question: Question) =>
 	Boolean(question.item) && question.have === undefined && !question.answer;
 
-/** Something the user has told the agent, kept so it is never asked again. */
-export const factSchema = z.object({
-	id: z.string().optional(),
-	at: z.string(),
-	question: z.string(),
-	answer: z.string(),
-	item: z.string().optional(),
-	category: z.enum(REQUIREMENT_KINDS).optional(),
-	have: z.boolean().optional(),
-	about: z.string().optional(),
-	correctedAt: z.string().optional(),
-});
-
-export type Fact = z.infer<typeof factSchema>;
-
-/** A correction to something the user told the agent: a new answer, and for a requirement whether they have it. */
-export type FactCorrection = { answer: string; have?: boolean };
-
 /** What a requirement's answer reads as, from the one-click choice and any detail given with it. */
 export const HAVE_IT = "I have it.";
 export const LACK_IT = "I do not have it.";

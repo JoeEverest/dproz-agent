@@ -1,26 +1,30 @@
 # About me
 
-The agent keeps this file up to date and reads it before every application. Edit it freely: what is written here wins over anything the agent assumed.
-
-## Identity and contact
+## Contact
 
 ## What I am looking for
 
-Roles, seniority, locations, remote or on-site, salary floor, industries to avoid.
-
 ## Experience
 
-## Education and certifications
+## Projects
+
+## Education
+
+## Certifications and licences
 
 ## Skills
 
-## Proof points
+## Achievements
 
-Results with numbers, projects, awards: the stories worth leading with.
+## Languages
+
+## Referees
+
+## Other facts
+
+## Do not have
 
 ## Standard answers
-
-Salary expectation, notice period, work authorisation, relocation, referees.
 
 ## Writing voice
 

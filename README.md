@@ -31,10 +31,11 @@ First launch is a setup screen: add your documents, and it checks the Claude sig
 
 The main screen is the board. Nothing has to be asked for:
 
-- After setup the agent reads your documents and writes `about-me.md`, its memory of who you are, and your master resume: your whole history, rewritten to the resume standard below. Every application's resume is tailored from it.
+- After setup the agent reads your documents and writes your master resume, `about-me.md`: everything about you in one Markdown document. Every job with all you did there and what came of it, your education, certifications, skills, achievements and referees, and the other facts that matter to some jobs and not others. It is not a resume to send. It is the record each resume is cut from, and the source of truth about you.
 - A source can also be a link, pasted where documents are added. A link to a file (a resume PDF, a Google Doc or Drive file shared with anyone who has the link) is downloaded and becomes a document. A link to a page (a portfolio, a profile) is kept as a link, and the agent reads the page itself, in its browser when the page needs a sign-in.
 - It then searches Dproz on a timer (every 6 hours by default; 4 hours, twice a day and daily are the other choices), looking at jobs posted since the last search. There is no cap: every real fit is pursued.
-- When it needs something only you know, the question appears on the Questions screen, as a chat. A requirement a job asks for that nothing you have given it shows is a quick question: **I have it** or **Not yet**, one click, as in Dproz Fit Check. Quick questions come first. What you have is then followed up with a deeper question (where you used it, what came of it), which you can skip. Every answer is kept in `facts.json`, so it is asked once: the same requirement on another job is answered for you. Answers are listed under **Your answers** in Profile settings, where each can be corrected or removed. The agent then takes the old answer off what it knows and off your master resume, prepares again any application that relied on it and has not been sent, and tells you if one already sent claimed it.
+- When it needs something only you know, the question appears on the Questions screen, as a chat. A requirement a job asks for that nothing you have given it shows is a quick question: **I have it** or **Not yet**, one click, as in Dproz Fit Check. Quick questions come first. What you have is then followed up with a deeper question (where you used it, what came of it), which you can skip. Each answer is worked into your master resume as a fact, where it belongs: a licence under Certifications and licences, something you do not have under Do not have. So it is asked once, and the same requirement on another job is answered for you.
+- A resume for one job is a selection from the master resume, not a copy of it. The agent picks what that employer cares about and leaves the rest out: a desk job does not hear about a commercial driving licence, and an answer you gave for one job is not put on every resume.
 - Each card lists the documents written for that job; clicking one slides a preview out beside the card, with a Download button that saves a copy.
 - **Add a job** takes a link or pasted posting for a job you found yourself, to apply to or only prepare.
 - Pause stops the current run and holds everything until you resume.
@@ -47,9 +48,9 @@ The form comes from the career services that publish their guidance ([Harvard](h
 
 What may be claimed comes from the Dproz AI service, which tailors resumes for Fit Check. The posting is the employer's wording and the resume is your facts. Keywords go in the skills and the summary, lightly, and only for what you have confirmed. Years, degrees and titles are yours, never the posting's thresholds. What you said you lack is not claimed.
 
-The agent may rewrite the whole resume, because it can ask you for what is missing. When your documents say what you did but not what came of it, it asks.
+The agent may rewrite the wording of anything, because it can ask you for what is missing. It may not add a fact. When your documents say what you did but not what came of it, it asks.
 
-A resume is structured data in the Dproz AI service's master resume shape (`src/shared/resume.ts`), printed by `render_resume` in one of five layouts ported from Fit Check's resume tailoring: classic, modern, compact, minimal and executive (`src/main/resume/templates`). Each print returns notes on the wording, checked against your master resume, `about-me.md`, your answers and the posting (`src/main/resume/review.ts`): the first person, duties, repeated verbs, long bullets, a figure you never gave, the posting's thresholds or sentences, the job's title or employer in the summary, and skills that are not skills. The writer fixes them before the judge reads it, and the judge holds the resume to the same rules.
+A tailored resume is structured data in the Dproz AI service's master resume shape (`src/shared/resume.ts`), printed by `render_resume` in one of five layouts ported from Fit Check's resume tailoring: classic, modern, compact, minimal and executive (`src/main/resume/templates`). Each print returns notes on the wording, checked against your master resume and the posting (`src/main/resume/review.ts`): the first person, duties, repeated verbs, long bullets, a figure you never gave, the posting's thresholds or sentences, the job's title or employer in the summary, and skills that are not skills. The writer fixes them before the judge reads it, and the judge holds the resume to the same rules.
 
 ### Agents
 
@@ -58,7 +59,7 @@ Every job is handed to subagents that start with a fresh context (`src/main/agen
 | Agent | Runs | Does |
 | --- | --- | --- |
 | Coordinator | once per run | Searches, screens postings, creates cards, delegates, and never writes or submits itself. |
-| `application-writer` | one per job, in parallel | Saves the posting, checks fit requirement by requirement, asks quick questions about what is unknown, decides the pitch, tailors the resume from the master resume and writes the cover letter, renders PDFs. No browser. |
+| `application-writer` | one per job, in parallel | Saves the posting, checks fit requirement by requirement, asks quick questions about what is unknown, decides the pitch, selects from the master resume what this employer cares about, writes the resume and cover letter, renders PDFs. No browser. |
 | `application-judge` | one per prepared job, in parallel | Read-only. Checks every claim against `about-me.md`, reads as the hiring manager, and holds the resume to the writing rules. Returns SEND or REVISE (two rounds at most). |
 | `application-sender` | one at a time | Fills and submits the form in the shared browser, creates and saves a portal account if needed, and marks the card Applied once it has seen a confirmation. |
 
@@ -79,9 +80,7 @@ Email-only jobs are never sent by the agent: the card moves to Apply manually wi
 Everything is ordinary files in the app's data folder (`workspace/` inside it); each card's Folder button opens its own folder.
 
 ```
-about-me.md              what the agent knows about you
-master-resume.json       your whole history as a resume, which each application is tailored from
-facts.json               every answer you have given, including what you have and do not have
+about-me.md              your master resume: everything about you, and the source of truth
 documents/               your originals
 links.json               pages you gave as sources about yourself
 templates/               the starting point for the cover letter
@@ -95,9 +94,9 @@ inbox.json               general questions the agent has asked you
 
 ### Profile settings and Settings
 
-- **Profile settings** (sidebar): the documents and links the agent holds on you, what it knows about you (`about-me.md`, editable in the app), and site logins. Logins are encrypted with the system keychain (Keychain on macOS, the Secret Service on Linux); on a Linux machine with no keyring the page says so.
-- **The agent's browser** (Profile settings → Site logins → Open browser): the agent drives its own Chromium and keeps its profile between runs. This button opens that same browser for you, so you can sign in to your email and job sites once by hand. The agent starts nothing while it is open and finds itself signed in afterwards. With your webmail signed in there, it also picks up the verification codes and confirmation links that sites email you, instead of asking you for them.
-- **Settings** (gear, bottom of the sidebar): send automatically (on by default; off means every application waits at Ready to submit and the browser can read but not click, type or upload), how often it searches, the model, and the installed version.
+- **Profile settings** (sidebar): your master resume as a page you edit in place, with your documents and links in a bar beside it. Click a document to preview it. Correct or add anything on the page and save: what is written there is the truth about you from then on. The agent then checks the applications it has not sent yet and prepares again any that relied on what you changed, and tells you if one already sent claimed it. If the agent added to the page while you were editing, you choose which version to keep.
+- **The agent's browser** (Settings → Site logins → Open browser): the agent drives its own Chromium and keeps its profile between runs. This button opens that same browser for you, so you can sign in to your email and job sites once by hand. The agent starts nothing while it is open and finds itself signed in afterwards. With your webmail signed in there, it also picks up the verification codes and confirmation links that sites email you, instead of asking you for them.
+- **Settings** (gear, bottom of the sidebar): send automatically (on by default; off means every application waits at Ready to submit and the browser can read but not click, type or upload), how often it searches, site logins, the model, and the installed version. Logins are encrypted with the system keychain (Keychain on macOS, the Secret Service on Linux); on a Linux machine with no keyring the page says so.
 
 ### Updates
 
@@ -121,10 +120,10 @@ npm run typecheck
 npm run lint
 npm test                              # unit tests
 npm run build
-node tests/e2e/run.mjs platform       # setup, board, questions panel, drawer, settings, vault (no agent run)
+node tests/e2e/run.mjs platform       # setup, board, questions, drawer, master resume editor, settings, vault (no agent run)
 node tests/e2e/run.mjs gallery        # screenshots of every screen, light and dark, with demo cards
 node tests/e2e/run.mjs full           # the whole autonomous flow against a local mock jobs feed and careers portal
-node tests/e2e/run.mjs corrections    # the agent takes a corrected answer off about-me.md and the master resume
+node tests/e2e/run.mjs edits          # you edit your master resume, and the agent prepares again the unsent application that relied on it
 node tests/e2e/run.mjs links          # the agent reads a linked page into about-me.md, against a local page
 node tests/e2e/run.mjs browser        # you sign in through the agent's browser, then its next run is signed in (opens a Chromium window)
 npm run pack && node tests/e2e/run.mjs packaged   # the packaged app, including a prepare-only agent run

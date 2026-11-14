@@ -1,4 +1,4 @@
-import type { Application, ApplicationStatus, Fact, FactCorrection, Question, QuestionReply } from "./application";
+import type { Application, ApplicationStatus, Question, QuestionReply } from "./application";
 
 export type Settings = {
 	workspaceDir: string;
@@ -98,6 +98,12 @@ export type AgentState = {
 
 export type InboxQuestion = Question;
 
+/**
+ * What became of the user's edit to their master resume. It is not saved when the agent changed the
+ * file while they were editing: `current` is then the agent's version, for them to choose between.
+ */
+export type ProfileSaved = { saved: true; previous: string } | { saved: false; current: string };
+
 export type HelpRequest = { id: string; instruction: string; applicationId?: string; askedAt: string };
 
 export type UpdateInfo = {
@@ -146,6 +152,8 @@ export type DeskApi = {
 		add(paths: string[]): Promise<WorkspaceDocument[]>;
 		pick(): Promise<WorkspaceDocument[]>;
 		remove(name: string): Promise<WorkspaceDocument[]>;
+		/** Saves a copy where the user chooses. Returns where it went, or null if they cancelled. */
+		save(name: string): Promise<string | null>;
 		links(): Promise<SourceLink[]>;
 		addLink(link: string): Promise<LinkAdded>;
 		removeLink(url: string): Promise<SourceLink[]>;
@@ -153,7 +161,8 @@ export type DeskApi = {
 	};
 	profile: {
 		read(): Promise<string>;
-		write(content: string): Promise<void>;
+		/** `base` is the text the edit started from. See ProfileSaved. */
+		write(content: string, base?: string): Promise<ProfileSaved>;
 	};
 	applications: {
 		list(): Promise<Application[]>;
@@ -170,11 +179,6 @@ export type DeskApi = {
 	inbox: {
 		list(): Promise<InboxQuestion[]>;
 		answer(questionId: string, reply: QuestionReply): Promise<InboxQuestion[]>;
-	};
-	facts: {
-		list(): Promise<Fact[]>;
-		correct(id: string, correction: FactCorrection): Promise<Fact[]>;
-		remove(id: string): Promise<Fact[]>;
 	};
 	credentials: {
 		list(): Promise<CredentialSummary[]>;
@@ -225,7 +229,7 @@ type RemoteAreas = Exclude<keyof DeskApi, "on">;
 export const DESK_METHODS = {
 	settings: ["get", "update"],
 	setup: ["status", "installBrowser", "chooseWorkspace"],
-	documents: ["list", "add", "pick", "remove", "links", "addLink", "removeLink"],
+	documents: ["list", "add", "pick", "remove", "save", "links", "addLink", "removeLink"],
 	profile: ["read", "write"],
 	applications: [
 		"list",
@@ -239,7 +243,6 @@ export const DESK_METHODS = {
 		"addJob",
 	],
 	inbox: ["list", "answer"],
-	facts: ["list", "correct", "remove"],
 	credentials: ["list", "save", "remove"],
 	agent: ["state", "activity", "onboard", "documentsAdded", "linksAdded", "setPaused", "stop"],
 	help: ["current", "respond"],

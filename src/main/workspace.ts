@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { WorkspaceDocument } from "@shared/ipc";
+import type { ProfileSaved, WorkspaceDocument } from "@shared/ipc";
 import aboutMeTemplate from "../../resources/templates/about-me.md?raw";
 import coverLetterTemplate from "../../resources/templates/cover-letter.html?raw";
 import { exists, isInside } from "./files";
@@ -9,8 +9,6 @@ import { getSettings } from "./settings";
 export type WorkspacePaths = {
 	root: string;
 	aboutMe: string;
-	masterResume: string;
-	facts: string;
 	documents: string;
 	applications: string;
 	templates: string;
@@ -21,8 +19,6 @@ export function pathsFor(root: string): WorkspacePaths {
 	return {
 		root,
 		aboutMe: path.join(root, "about-me.md"),
-		masterResume: path.join(root, "master-resume.json"),
-		facts: path.join(root, "facts.json"),
 		documents: path.join(root, "documents"),
 		applications: path.join(root, "applications"),
 		templates: path.join(root, "templates"),
@@ -89,9 +85,17 @@ export async function readAboutMe() {
 	return fs.readFile(aboutMe, "utf8");
 }
 
-export async function writeAboutMe(content: string) {
+/**
+ * Saves the user's edit of their master resume. `base` is the text their edit started from: if the
+ * agent has changed the file since, nothing is written and the current text is handed back, so
+ * neither side's work is lost without the user choosing.
+ */
+export async function writeAboutMe(content: string, base?: string): Promise<ProfileSaved> {
 	const { aboutMe } = await ensureWorkspace();
+	const current = await fs.readFile(aboutMe, "utf8").catch(() => "");
+	if (base !== undefined && current.trim() !== base.trim()) return { saved: false, current };
 	await fs.writeFile(aboutMe, content);
+	return { saved: true, previous: current };
 }
 
 export async function resolveInWorkspace(file: string) {

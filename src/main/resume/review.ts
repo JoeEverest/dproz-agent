@@ -15,9 +15,7 @@ import { mdBullets, mdLines } from "./html";
 
 /** What a resume is checked against. Every part is optional: a check with nothing to compare to is skipped. */
 export type Evidence = {
-	/** The user's own resume as data, before any tailoring. */
-	master?: Resume;
-	/** Everything else the user has said about themselves (about-me.md). */
+	/** The user's master resume, about-me.md: everything they have said about themselves. */
 	aboutMe?: string;
 	/** The posting. */
 	job?: string;
@@ -138,39 +136,6 @@ function skillEntries(markdown?: string | null) {
 	});
 }
 
-/** Every piece of text in a resume that says something about the person. */
-function resumeText(resume?: Resume) {
-	if (!resume) return "";
-	return [
-		resume.contact.title,
-		resume.summary,
-		resume.skills,
-		resume.certifications,
-		resume.accomplishments,
-		resume.affiliations,
-		resume.additionalInfo,
-		...(resume.workExperience ?? []).flatMap((job) => [
-			job.jobTitle,
-			job.employer,
-			job.startDate,
-			job.endDate,
-			job.highlights,
-			job.relevantSkills,
-		]),
-		...(resume.education ?? []).flatMap((school) => [
-			school.schoolName,
-			school.educationLevel,
-			school.fieldOfStudy,
-			school.graduation,
-			school.details,
-		]),
-		...(resume.languages ?? []).flatMap((language) => [language.language, language.proficiency]),
-		...(resume.customSections ?? []).flatMap((section) => [section.title, section.content]),
-	]
-		.filter(Boolean)
-		.join("\n");
-}
-
 function dateStyle(date?: string | null) {
 	if (!date || /^may\b/i.test(date)) return null;
 	if (/^[A-Za-z]{3}\.? \d{4}$/.test(date)) return "Aug 2024";
@@ -197,7 +162,7 @@ export function reviewResume(resume: Resume, evidence: Evidence = {}): string[] 
 	const summary = resume.summary ?? "";
 	const bulletsOf = (job: (typeof jobs)[number]) => mdBullets(job.highlights);
 	const allBullets = jobs.flatMap(bulletsOf);
-	const known = [resumeText(evidence.master), evidence.aboutMe ?? ""].join("\n").trim();
+	const known = (evidence.aboutMe ?? "").trim();
 	const prose = [
 		summary,
 		...jobs.flatMap((job) => mdLines(job.highlights)),
@@ -208,10 +173,7 @@ export function reviewResume(resume: Resume, evidence: Evidence = {}): string[] 
 
 	// --- Form: what the career-service guides agree on.
 
-	// A summary may stay in the first person when the user's own resume is written that way.
-	const ownVoice = FIRST_PERSON.test(evidence.master?.summary ?? "");
 	for (const text of prose) {
-		if (text === summary && ownVoice) continue;
 		if (FIRST_PERSON.test(text))
 			notes.push(`${quote(text)} is in the first person. A resume has no "I", "my" or "we".`);
 	}
@@ -283,7 +245,7 @@ export function reviewResume(resume: Resume, evidence: Evidence = {}): string[] 
 			const unknown = figures(text).filter((figure) => !knownFigures.has(figure));
 			if (unknown.length) {
 				notes.push(
-					`${quote(text)} gives ${unknown.join(", ")}, which is not in the master resume or about-me.md. Keep it only if the user's documents say so, and then add it to about-me.md.`,
+					`${quote(text)} gives ${unknown.join(", ")}, which is not in about-me.md. Keep it only if the user's documents say so, and then add it to about-me.md.`,
 				);
 			}
 		}
@@ -322,9 +284,7 @@ export function reviewResume(resume: Resume, evidence: Evidence = {}): string[] 
 		}
 	}
 
-	const before = evidence.master?.skills ?? "";
 	for (const skill of skillEntries(resume.skills)) {
-		if (containsPhrase(before, skill)) continue;
 		if (ELIGIBILITY.test(skill)) {
 			notes.push(`"${skill}" is a condition of eligibility, not a skill. It goes in additionalInfo.`);
 		} else if (TRAIT.test(skill.trim())) {

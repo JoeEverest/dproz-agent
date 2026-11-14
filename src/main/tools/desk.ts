@@ -18,12 +18,12 @@ import {
 	collectUndeliveredAnswers,
 	createApplication,
 	getApplication,
-	knownFact,
 	listApplications,
+	listAsked,
 	patchApplication,
 } from "../applications";
 import { findCredential, listCredentials, saveCredential } from "../credentials";
-import { exists, readJson, readText, writeJson } from "../files";
+import { exists, readText, writeJson } from "../files";
 import { requestHelp } from "../help";
 import { notify } from "../notify";
 import { renderHtmlToPdf, renderPdf } from "../pdf";
@@ -69,12 +69,6 @@ async function missingDocuments(id: string, documents: { file: string }[]) {
 		documents.map(async ({ file }) => ((await exists(path.join(folder, file))) ? null : file)),
 	);
 	return checks.filter((file) => file !== null);
-}
-
-/** Everything the user has told the agent in their own words: about-me.md and their answers. */
-async function userSaid() {
-	const { aboutMe, facts } = await workspacePaths();
-	return [await readText(aboutMe), await readText(facts)].join("\n");
 }
 
 export const deskServer = () =>
@@ -156,7 +150,7 @@ Two kinds of question:
 - A quick question asks whether they have one thing a job requires that nothing they have given you settles. Set item. They answer "I have it" or "Not yet" with one click, so ask these freely: it is how you learn what may go on their resume. Add followUp to learn, only when they have it, where they used it and what came of it.
 - An open question is anything else. Set question, and they answer in a line or two.
 
-Every answer is kept in facts.json. A quick question the user has answered before is not asked again: you get their earlier answer back instead.`,
+Read about-me.md first and never ask what it already answers. When the answers come back, work them into about-me.md.`,
 				{
 					applicationId: z
 						.string()
@@ -188,34 +182,26 @@ Every answer is kept in facts.json. A quick question the user has answered befor
 						.min(1),
 				},
 				guarded(async ({ applicationId, questions }) => {
-					const known: string[] = [];
-					const fresh: typeof questions = [];
 					for (const question of questions) {
 						if (!question.item && !question.question?.trim()) throw new Error("Each question needs question or item.");
-						const fact = question.item ? await knownFact(question.item) : undefined;
-						if (fact) known.push(`${question.item}: ${fact.answer}`);
-						else fresh.push(question);
 					}
-					if (fresh.length && applicationId) await askApplicationQuestions(applicationId, fresh);
-					else if (fresh.length) {
-						await askInboxQuestions(fresh);
-						notify("A question for you", fresh[0].question ?? `Do you have this: ${fresh[0].item}?`);
+					if (applicationId) await askApplicationQuestions(applicationId, questions);
+					else {
+						await askInboxQuestions(questions);
+						notify("A question for you", questions[0].question ?? `Do you have this: ${questions[0].item}?`);
 					}
-					const already = known.length
-						? ` Already answered before, so not asked again:\n${known.map((line) => `- ${line}`).join("\n")}`
-						: "";
-					return fresh.length
-						? `Queued ${fresh.length}. Continue with other work; call get_answers later to pick up the reply.${already}`
-						: `Nothing was asked.${already}`;
+					return "Queued. Continue with other work; call get_answers later to pick up the reply.";
 				}),
 			),
 			tool(
 				"get_answers",
-				"Collect answers the user has given since you last checked. Each is returned once, so save anything durable to about-me.md before moving on.",
+				"Collect the answers the user has given since you last checked, and see everything you have asked before. A new answer is returned once, so work it into about-me.md before moving on. askedBefore is your record of past questions, answered or not (answer is null while one is waiting): never ask any of them again.",
 				{},
 				guarded(async () => {
-					const answers = await collectUndeliveredAnswers();
-					return answers.length ? answers : "No new answers.";
+					// Read the record first: collecting marks the new answers as delivered.
+					const askedBefore = await listAsked();
+					const newAnswers = await collectUndeliveredAnswers();
+					return { newAnswers: newAnswers.length ? newAnswers : "None.", askedBefore };
 				}),
 			),
 			tool(
@@ -263,19 +249,8 @@ Every answer is kept in facts.json. A quick question the user has answered befor
 				}),
 			),
 			tool(
-				"save_master_resume",
-				"Save the user's master resume: their whole history as structured content, written to the resume standard, with nothing aimed at one job. Every application's resume is tailored from it, so keep it complete and current: save it again whenever the user tells you something that belongs on it. Kept as master-resume.json in the workspace. Returns notes on the wording, to fix and save again.",
-				{ resume: resumeSchema },
-				guarded(async ({ resume }) => {
-					const { masterResume } = await workspacePaths();
-					await writeJson(masterResume, resume);
-					const notes = reviewResume(resume, { aboutMe: await userSaid() });
-					return { saved: masterResume, notes: notes.length ? notes : "Nothing to fix in the wording." };
-				}),
-			),
-			tool(
 				"render_resume",
-				`Print a tailored resume from structured content, in one of five layouts, to a PDF. The content is also saved as resume.json beside the PDF, so to revise: read resume.json, change it, and call this again with the whole resume. Returns the page count and notes on the wording, checked against the master resume, about-me.md and the posting in job.md. Fix every note and render again, unless a note is plainly mistaken about this resume. Then read the PDF to check how it looks.
+				`Print a tailored resume from structured content, in one of five layouts, to a PDF. The content is also saved as resume.json beside the PDF, so to revise: read resume.json, change it, and call this again with the whole resume. Returns the page count and notes on the wording, checked against about-me.md and the posting in job.md. Fix every note and render again, unless a note is plainly mistaken about this resume. Then read the PDF to check how it looks.
 
 Layouts:
 ${Object.entries(RESUME_TEMPLATES)
@@ -303,12 +278,10 @@ Lists are Markdown text with one "- " line for each item. Wrap a few words in **
 					const json = path.join(folder, "resume.json");
 					await writeJson(json, resume);
 
-					const { masterResume } = await workspacePaths();
+					const { aboutMe } = await workspacePaths();
 					const card = await getApplication(path.basename(folder)).catch(() => null);
-					const master = resumeSchema.safeParse(await readJson<unknown>(masterResume, null));
 					const notes = reviewResume(resume, {
-						master: master.success ? master.data : undefined,
-						aboutMe: await userSaid(),
+						aboutMe: await readText(aboutMe),
 						job: await readText(path.join(folder, "job.md")),
 						company: card?.company,
 						jobTitle: card?.title,

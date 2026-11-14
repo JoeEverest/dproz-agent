@@ -225,19 +225,28 @@ try {
 			applied.documents.map((document) => document.file).join(", "),
 		);
 	}
-	const master = JSON.parse(await readWorkspace("master-resume.json").then((text) => text || "null"));
+	// about-me.md is the master resume: every job with its results, and the answers worked in as facts.
+	const record = await readWorkspace("about-me.md");
+	log(`master resume:\n${record}`);
 	check(
-		"the master resume was saved from the user's documents",
-		master?.contact?.lastName === "Kisanga" && (master.workExperience ?? []).length >= 2,
-		`${(master?.workExperience ?? []).length} jobs`,
+		"the master resume has every job and the results the user gave",
+		/Meru Dairies/.test(record) && /Tembo/.test(record) && /220/.test(record) && /42 million/.test(record),
 	);
-	const facts = JSON.parse((await readWorkspace("facts.json")) || "[]");
-	log(`quick questions answered: ${quickAnswers}; facts kept: ${facts.length}`);
 	check(
-		"every answer was kept as a fact",
-		facts.length >= 4 && facts.every((fact) => fact.answer),
-		`${facts.length} facts`,
+		"an answer to a quick question came back as a fact, not as a question",
+		/class B/i.test(record) && !/Do you have this/i.test(record),
+		record.split("\n").find((line) => /class B/i.test(line)) ?? "not found",
 	);
+	const notes = record.split("\n").filter((line) => /\b(asked|not answered|no answer|do not ask)\b/i.test(line));
+	check(
+		"the master resume holds facts about the user, and none of the agent's notes",
+		notes.length === 0,
+		notes.join(" | "),
+	);
+	// Whether a quick question is needed depends on what the agent already learned, so it is not required.
+	log(`quick questions answered: ${quickAnswers}`);
+	const leftovers = (await fs.readdir(sandbox.workspace)).filter((file) => /master-resume|facts/.test(file));
+	check("nothing about the user is kept outside the master resume", leftovers.length === 0, leftovers.join(", "));
 	const logins = await window.evaluate(() => window.desk.credentials.list());
 	check(
 		"the portal account it created was saved to logins",
