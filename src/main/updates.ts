@@ -11,7 +11,7 @@ type Latest = { version?: string; page?: string; downloads?: Record<string, stri
 
 let info: UpdateInfo = { current: app.getVersion(), available: false };
 
-const platformKey = () => (process.platform === "darwin" ? "mac" : process.platform === "linux" ? "linux" : "");
+const platformKey = () => ({ darwin: "mac", linux: "linux", win32: "win" })[process.platform as string] ?? "";
 
 export const updateStatus = () => info;
 

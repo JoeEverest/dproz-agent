@@ -2,6 +2,7 @@ import path from "node:path";
 import type { DeskApi, SetupStatus } from "@shared/ipc";
 import { dialog, ipcMain, shell } from "electron";
 import { agent } from "./agent/manager";
+import { apiKeyStatus, clearApiKey, saveApiKey } from "./apiKey";
 import {
 	answerApplicationQuestion,
 	answerInboxQuestion,
@@ -31,7 +32,13 @@ type Handlers = {
 
 async function setupStatus(): Promise<SetupStatus> {
 	const [claude, browserInstalled, settings] = await Promise.all([claudeStatus(), isBrowserInstalled(), getSettings()]);
-	return { claude, browserInstalled, workspaceDir: settings.workspaceDir, credentialStorage: storageBackend() };
+	return {
+		claude,
+		apiKey: apiKeyStatus(),
+		browserInstalled,
+		workspaceDir: settings.workspaceDir,
+		credentialStorage: storageBackend(),
+	};
 }
 
 const handlers: Handlers = {
@@ -111,6 +118,16 @@ const handlers: Handlers = {
 		stop: () => agent.stop(),
 	},
 	help: { current: currentHelpRequest, respond: respondToHelp },
+	claude: {
+		setApiKey: async (key) => {
+			await saveApiKey(key);
+			return setupStatus();
+		},
+		clearApiKey: async () => {
+			await clearApiKey();
+			return setupStatus();
+		},
+	},
 	updates: { status: updateStatus, check: checkForUpdate },
 	shell: {
 		openExternal: async (url) => {

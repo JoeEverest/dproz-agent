@@ -1,0 +1,70 @@
+name: Test
+
+# Type checks, unit tests and the app-level test on every platform the app ships for.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+          - name: Linux
+            os: ubuntu-latest
+          - name: Windows
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      # The runners have no Claude sign-in; the test checks that this is reported honestly.
+      EXPECT_SIGNED_OUT: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm run lint
+
+      - run: npm test
+
+      - run: npm run build
+
+      - name: Linux display and libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb libnotify4 libsecret-1-0
+          npx playwright install-deps chromium
+
+      - name: App-level test
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            DPROZ_AGENT_ELECTRON_ARGS=--no-sandbox xvfb-run -a node tests/e2e/run.mjs platform | tee platform.log
+          else
+            node tests/e2e/run.mjs platform | tee platform.log
+          fi
+          grep -q "^RESULT" platform.log
+          ! grep -q "^FAIL" platform.log
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-${{ matrix.os }}
+          if-no-files-found: ignore
+          path: tests/e2e/.tmp/shots/*.png

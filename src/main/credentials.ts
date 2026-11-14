@@ -36,7 +36,7 @@ async function localKey() {
 	}
 }
 
-async function seal(text: string): Promise<Buffer> {
+export async function seal(text: string): Promise<Buffer> {
 	if (safeStorage.isEncryptionAvailable()) return Buffer.concat([Buffer.from("K"), safeStorage.encryptString(text)]);
 	const iv = randomBytes(12);
 	const cipher = createCipheriv("aes-256-gcm", await localKey(), iv);
@@ -44,7 +44,7 @@ async function seal(text: string): Promise<Buffer> {
 	return Buffer.concat([Buffer.from("L"), iv, cipher.getAuthTag(), body]);
 }
 
-async function unseal(sealed: Buffer): Promise<string> {
+export async function unseal(sealed: Buffer): Promise<string> {
 	if (sealed[0] === 0x4b) return safeStorage.decryptString(sealed.subarray(1));
 	const decipher = createDecipheriv("aes-256-gcm", await localKey(), sealed.subarray(1, 13));
 	decipher.setAuthTag(sealed.subarray(13, 29));

@@ -898,14 +898,17 @@
 					<div>
 						<h2>What you need</h2>
 						<p>
-							A Mac with Apple Silicon, or Linux on x64, and
-							<a href="https://claude.com/claude-code">Claude Code</a> installed and signed in. The agent runs on your
-							own Claude account, and everything it knows about you stays on your computer.
+							A Mac with Apple Silicon, or Windows or Linux on x64. The agent runs on your own Claude: either
+							<a href="https://claude.com/claude-code">Claude Code</a> signed in on that computer, or an Anthropic
+							API key. Everything it knows about you stays on your computer.
 						</p>
 					</div>
 					<div>
-						<h2>First open on a Mac</h2>
-						<p>The app is not notarised yet, so macOS blocks it. After dragging it to Applications, run this once:</p>
+						<h2>First open</h2>
+						<p>
+							The builds are not signed yet. On Windows, choose More info, then Run anyway. On a Mac, drag it to
+							Applications and run this once:
+						</p>
 						<code>xattr -cr "/Applications/Dproz Agent.app"</code>
 					</div>
 				</section>
@@ -927,9 +930,10 @@
 		</div>
 
 		<script>
-			const platform = /Mac/i.test(navigator.userAgent) ? "mac" : /Linux|X11/i.test(navigator.userAgent) ? "linux" : "";
-			const names = { mac: "macOS", linux: "Linux", deb: "Linux (.deb)" };
-			const details = { mac: "Apple Silicon", linux: "AppImage, x64", deb: "x64" };
+			const agent = navigator.userAgent;
+			const platform = /Mac/i.test(agent) ? "mac" : /Windows/i.test(agent) ? "win" : /Linux|X11/i.test(agent) ? "linux" : "";
+			const names = { mac: "macOS", win: "Windows", linux: "Linux", deb: "Linux (.deb)" };
+			const details = { mac: "Apple Silicon", win: "x64 installer", linux: "AppImage, x64", deb: "x64" };
 			const megabytes = (bytes) => `${Math.round(bytes / 1048576)} MB`;
 			const meta = document.getElementById("meta");
 			const buttons = document.querySelectorAll("[data-download]");
@@ -959,7 +963,7 @@
 					meta.replaceChildren();
 					const lead = mine
 						? `Version ${latest.version} · ${details[mine]} · ${megabytes(latest.files[mine].size)}`
-						: `Version ${latest.version} · for macOS and Linux`;
+						: `Version ${latest.version} · for macOS, Windows and Linux`;
 					meta.append(lead);
 					if (others.length) {
 						meta.id = "other";

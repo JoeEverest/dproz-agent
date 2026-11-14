@@ -1,6 +1,7 @@
 import { Check, CircleAlert, LoaderCircle } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { useDeskEvent, useResource } from "../lib/hooks";
+import { ApiKeyForm } from "./ApiKeyForm";
 import { DocumentsPanel } from "./Documents";
 import { DprozLogo } from "./DprozLogo";
 import { Button } from "./ui";
@@ -93,11 +94,16 @@ export function Onboarding({ onDone }: { onDone: () => Promise<void> }) {
 						<DocumentsPanel />
 					</Step>
 
-					<Step state={!claude ? "working" : claude.signedIn ? "done" : "problem"} title="Claude Code">
+					<Step state={!claude ? "working" : claude.signedIn ? "done" : "problem"} title="Claude">
 						{!claude && <p>Checking that Claude Code is signed in on this computer…</p>}
-						{claude?.signedIn && (
+						{claude?.signedIn && claude.method === "api-key" && (
 							<p className="selectable">
-								Signed in{claude.email ? ` as ${claude.email}` : ""}. The agent runs on this account.
+								Using your API key ending in {status?.apiKey.hint}. The agent's work is billed to that key.
+							</p>
+						)}
+						{claude?.signedIn && claude.method === "claude-code" && (
+							<p className="selectable">
+								Signed in to Claude Code{claude.email ? ` as ${claude.email}` : ""}. The agent runs on this account.
 							</p>
 						)}
 						{claude && !claude.signedIn && (
@@ -111,6 +117,10 @@ export function Onboarding({ onDone }: { onDone: () => Promise<void> }) {
 								<Button className="mt-3" onClick={() => void setup.refresh()}>
 									Check again
 								</Button>
+								<p className="mt-5 mb-2">Or use an Anthropic API key instead:</p>
+								<div className="font-sans">
+									<ApiKeyForm onSaved={(next) => setup.setData(next)} />
+								</div>
 							</>
 						)}
 					</Step>

@@ -5,8 +5,15 @@ import { createSandbox, launchApp, shot } from "./harness.mjs";
 
 // A stand-in for the download site, so the update check never leaves this machine.
 let latestVersion = "0.0.1";
-const updates = http.createServer((_request, response) => {
+const updates = http.createServer((request, response) => {
 	response.setHeader("content-type", "application/json");
+	// Also stands in for the Anthropic API when a key is checked: it refuses exactly one key.
+	if (request.url.startsWith("/v1/models")) {
+		const refused = request.headers["x-api-key"] === "sk-ant-refused";
+		response.statusCode = refused ? 401 : 200;
+		response.end(JSON.stringify(refused ? { type: "error" } : { data: [] }));
+		return;
+	}
 	response.end(
 		JSON.stringify({
 			version: latestVersion,
@@ -19,7 +26,10 @@ await new Promise((resolve) => updates.listen(0, "127.0.0.1", resolve));
 const updateUrl = `http://127.0.0.1:${updates.address().port}/api/latest`;
 
 const sandbox = await createSandbox("platform");
-const { app, window } = await launchApp(sandbox, { DPROZ_AGENT_UPDATE_URL: updateUrl });
+const { app, window } = await launchApp(sandbox, {
+	DPROZ_AGENT_UPDATE_URL: updateUrl,
+	DPROZ_AGENT_ANTHROPIC_URL: new URL(updateUrl).origin,
+});
 const results = [];
 const check = (name, passed, detail = "") => {
 	results.push(Boolean(passed));
@@ -89,6 +99,7 @@ try {
 	);
 	await window.getByRole("button", { name: /Accountant/ }).waitFor({ timeout: 10_000 });
 	check("a card written to disk appears on the board without a reload", true);
+	await shot(window, `platform-${process.platform}-board`);
 
 	const nav = (name) => window.getByRole("navigation").getByRole("button", { name });
 	await nav("Questions (1)").waitFor({ timeout: 10_000 });
@@ -164,6 +175,29 @@ try {
 		"the agent settings live on the Settings page",
 		(await window.getByText("Send applications automatically", { exact: true }).count()) === 1,
 	);
+
+	const useKey = window.getByRole("button", { name: "Use an API key instead" });
+	if (await useKey.count()) await useKey.click();
+	const keyBox = window.getByRole("textbox", { name: "Anthropic API key" });
+	await keyBox.fill("sk-ant-refused");
+	await window.getByRole("button", { name: "Use this key" }).click();
+	await window.getByText("Anthropic did not accept that key").waitFor({ timeout: 20_000 });
+	check("a key Anthropic refuses is not saved", !(await status()).apiKey.set);
+	await keyBox.fill("sk-ant-test-key-1234");
+	await window.getByRole("button", { name: "Use this key" }).click();
+	await window.getByText("API key ending in 1234").waitFor({ timeout: 30_000 });
+	const withKey = await status();
+	check(
+		"an accepted key becomes the way the agent signs in",
+		withKey.apiKey.set && withKey.claude.signedIn && withKey.claude.method === "api-key",
+		JSON.stringify(withKey.claude).slice(0, 120),
+	);
+	const keyOnDisk = await fs.readFile(path.join(sandbox.userData, "anthropic.key"));
+	check("the key is never written to disk in clear text", !keyOnDisk.includes("sk-ant-test-key-1234"));
+	await window.getByRole("button", { name: "Remove key" }).click();
+	await window.getByText("API key ending in 1234").waitFor({ state: "detached", timeout: 30_000 });
+	check("removing the key goes back to the Claude Code sign-in", !(await status()).apiKey.set);
+
 	const updateIcon = window.getByRole("navigation").getByRole("button", { name: /is available/ });
 	check("no update icon while the installed version is current", (await updateIcon.count()) === 0);
 	latestVersion = "9.9.9";

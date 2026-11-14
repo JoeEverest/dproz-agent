@@ -6,8 +6,8 @@ It is local only: no Dproz account, no server, no sync. The agent runs on the Cl
 
 ## Requirements
 
-- macOS or Linux. Windows is untested.
-- [Claude Code](https://claude.com/claude-code) installed and signed in (`claude` in a terminal). An `ANTHROPIC_API_KEY` in the environment also works.
+- macOS (Apple Silicon), Linux (x64) or Windows (x64).
+- Your own Claude: either [Claude Code](https://claude.com/claude-code) installed and signed in (`claude` in a terminal), or an Anthropic API key, which you can paste in during setup or under Settings. The key is stored encrypted and wins over the Claude Code sign-in while it is set.
 - Node 22 or newer to build.
 
 ## Run it
@@ -108,7 +108,9 @@ To release, set the version in `package.json`, commit, then push a matching tag:
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-`.github/workflows/release.yml` builds the macOS (Apple Silicon) and Linux (x64) installers on their own runners and publishes a GitHub release. Each platform is built on that platform because the Agent SDK ships its Claude Code binary as a per-platform package. Builds are ad-hoc signed, not notarised, so on a Mac the app has to be cleared once with `xattr -cr "/Applications/Dproz Agent.app"`.
+`.github/workflows/release.yml` builds the macOS (Apple Silicon), Linux (x64) and Windows (x64) installers on their own runners and publishes a GitHub release. `.github/workflows/test.yml` runs the type checks, unit tests and the app-level test on all three for every push. Each platform is built on that platform because the Agent SDK ships its Claude Code binary as a per-platform package. Builds are not signed with a paid certificate: on a Mac the app has to be cleared once with `xattr -cr "/Applications/Dproz Agent.app"`, and on Windows SmartScreen asks for More info, then Run anyway.
+
+The app icon is rendered from the Dproz logo by `node tools/icon.mjs` into `build/` (installers) and `resources/icon.png` (window and tray).
 
 ## Download site
 
@@ -127,3 +129,4 @@ git tag v0.2.0 && git push origin v0.2.0
 | `DPROZ_AGENT_TEST_ORIGIN` | Fence the agent to one origin (see Tests). |
 | `DPROZ_API_URL`, `DPROZ_API_KEY`, `DPROZ_SITE_URL` | Point the Dproz tools at another API. |
 | `DPROZ_AGENT_UPDATE_URL` | Where the app checks for a newer release. Empty turns the check off. |
+| `DPROZ_AGENT_ANTHROPIC_URL` | Where an API key is checked before it is saved. Tests point it away from the real API. |

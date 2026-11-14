@@ -1,6 +1,7 @@
 import path from "node:path";
 import { app, BrowserWindow, Menu, nativeImage, nativeTheme, shell, Tray } from "electron";
 import { agent } from "./agent/manager";
+import { loadApiKey } from "./apiKey";
 import { onStatusChange, watchApplications } from "./applications";
 import { registerIpc } from "./ipc";
 import { notifyStatus } from "./notify";
@@ -28,6 +29,8 @@ function createWindow() {
 		show: false,
 		title: "Dproz Agent",
 		titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
+		autoHideMenuBar: true,
+		icon: process.platform === "darwin" ? undefined : appIcon(),
 		trafficLightPosition: { x: 20, y: 18 },
 		backgroundColor: nativeTheme.shouldUseDarkColors ? "#151618" : "#f4f5f6",
 		webPreferences: {
@@ -56,10 +59,17 @@ function createWindow() {
 	return window;
 }
 
+const appIcon = () => path.join(app.getAppPath(), "resources", "icon.png");
+
 function createTray() {
-	const icon = nativeImage.createFromPath(path.join(app.getAppPath(), "resources", "trayTemplate.png"));
-	if (icon.isEmpty()) return null;
-	icon.setTemplateImage(true);
+	// macOS draws a monochrome template in the menu bar; Windows and Linux show the app icon.
+	const onMac = process.platform === "darwin";
+	const source = nativeImage.createFromPath(
+		onMac ? path.join(app.getAppPath(), "resources", "trayTemplate.png") : appIcon(),
+	);
+	if (source.isEmpty()) return null;
+	const icon = onMac ? source : source.resize({ width: 32, height: 32, quality: "best" });
+	if (onMac) icon.setTemplateImage(true);
 	const created = new Tray(icon);
 	created.setToolTip("Dproz Agent");
 	created.setContextMenu(
@@ -88,8 +98,14 @@ if (!app.requestSingleInstanceLock()) {
 		if (!tray && process.platform !== "darwin") app.quit();
 	});
 
+	// Windows shows notifications and groups taskbar windows by this id.
+	if (process.platform === "win32") app.setAppUserModelId("com.dproz.agent");
+
 	void app.whenReady().then(async () => {
+		// The packaged app carries its own icon; in development the dock would show Electron's.
+		if (!app.isPackaged) app.dock?.setIcon(appIcon());
 		await ensureWorkspace();
+		await loadApiKey();
 		await agent.load();
 		registerIpc();
 		onStatusChange(notifyStatus);

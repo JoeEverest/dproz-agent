@@ -1,6 +1,7 @@
 import { latestRelease, releasesPage } from "../lib/release.js";
 
-const guess = (userAgent = "") => (/Mac/i.test(userAgent) ? "mac" : /Linux/i.test(userAgent) ? "linux" : "");
+const guess = (userAgent = "") =>
+	/Mac/i.test(userAgent) ? "mac" : /Windows/i.test(userAgent) ? "win" : /Linux/i.test(userAgent) ? "linux" : "";
 
 // Sends the browser to the newest installer for its platform; the releases page when it cannot tell.
 export default async function handler(request, response) {

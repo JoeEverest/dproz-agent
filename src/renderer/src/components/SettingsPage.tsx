@@ -15,6 +15,7 @@ import {
 import { type DragEvent, type FormEvent, type ReactNode, useState } from "react";
 import { fileSize, relativeTime } from "../lib/format";
 import { useResource } from "../lib/hooks";
+import { ApiKeyForm } from "./ApiKeyForm";
 import { Markdown } from "./Markdown";
 import { PageHeader } from "./PageHeader";
 import { Button, Field, IconButton, Input, Notice, Picker, Textarea, Toggle } from "./ui";
@@ -387,7 +388,7 @@ function AgentGroup({ settings, onChange }: Props) {
 			{claude?.signedIn && (
 				<Row
 					title="Model"
-					note={`Runs on your Claude Code sign-in${claude.email ? `, ${claude.email}` : ""}.`}
+					note="The model the agent and its helpers think with."
 					control={
 						<Picker
 							label="Model"
@@ -399,10 +400,68 @@ function AgentGroup({ settings, onChange }: Props) {
 					}
 				/>
 			)}
-			{claude && !claude.signedIn && (
-				<p role="alert" className="selectable px-4 py-3.5 text-danger">
-					{claude.reason}
-				</p>
+		</Group>
+	);
+}
+
+function AccountGroup() {
+	const setup = useResource(() => window.desk.setup.status());
+	const [adding, setAdding] = useState(false);
+	const status = setup.data;
+	const claude = status?.claude;
+	const usingKey = Boolean(status?.apiKey.set);
+	const showForm = adding || Boolean(claude && !claude.signedIn && !usingKey);
+
+	const title = !status
+		? "Checking"
+		: usingKey
+			? `API key ending in ${status.apiKey.hint}`
+			: claude?.signedIn
+				? "Claude Code sign-in"
+				: "Not signed in";
+	const note = !status
+		? "Looking for a Claude sign-in on this computer."
+		: usingKey
+			? "The agent's work is billed to this key. It is stored encrypted on this computer."
+			: claude?.signedIn
+				? `Signed in${claude.email ? ` as ${claude.email}` : ""}. The agent runs on this account.`
+				: claude?.reason;
+
+	return (
+		<Group
+			title="Claude account"
+			note="The agent runs on your own Claude: either the Claude Code sign-in on this computer, or an Anthropic API key."
+		>
+			<Row
+				title={title}
+				note={note}
+				control={
+					usingKey ? (
+						<Button size="sm" tone="danger" onClick={async () => setup.setData(await window.desk.claude.clearApiKey())}>
+							Remove key
+						</Button>
+					) : (
+						!showForm && (
+							<Button size="sm" onClick={() => setAdding(true)}>
+								Use an API key instead
+							</Button>
+						)
+					)
+				}
+			/>
+			{showForm && !usingKey && (
+				<div className="px-4 py-3.5">
+					<p className="mb-2 text-xs text-ink-3">
+						Paste a key from the Anthropic Console. It is checked, then stored encrypted on this computer.
+					</p>
+					<ApiKeyForm
+						onSaved={(next) => {
+							setup.setData(next);
+							setAdding(false);
+						}}
+						onCancel={adding ? () => setAdding(false) : undefined}
+					/>
+				</div>
 			)}
 		</Group>
 	);
@@ -481,6 +540,7 @@ export function SettingsPage({ settings, onChange, update }: Props & { update: U
 	return (
 		<Page title="Settings">
 			<AgentGroup settings={settings} onChange={onChange} />
+			<AccountGroup />
 			<AboutAppGroup update={update} />
 		</Page>
 	);

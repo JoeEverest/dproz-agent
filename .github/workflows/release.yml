@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag like v0.2.0 (matching package.json) to build the installers and publish a GitHub release.
+# Push a tag like v0.2.0 (matching package.json) to build the macOS, Linux and Windows installers and publish a GitHub release.
 on:
   push:
     tags: ["v*"]
@@ -19,7 +19,12 @@ jobs:
             os: macos-latest
           - name: Linux, x64
             os: ubuntu-latest
+          - name: Windows, x64
+            os: windows-latest
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -68,6 +73,7 @@ jobs:
             dist/*.dmg
             dist/*.AppImage
             dist/*.deb
+            dist/*.exe
 
   publish:
     name: Publish the release

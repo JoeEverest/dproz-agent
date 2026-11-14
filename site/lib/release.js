@@ -1,7 +1,7 @@
 // Reads the latest public release of the app from GitHub.
 const REPO = process.env.GITHUB_REPO ?? "JoeEverest/dproz-agent";
 
-const EXTENSIONS = { mac: ".dmg", linux: ".AppImage", deb: ".deb" };
+const EXTENSIONS = { mac: ".dmg", win: ".exe", linux: ".AppImage", deb: ".deb" };
 
 export const releasesPage = `https://github.com/${REPO}/releases/latest`;
 
