@@ -18,6 +18,7 @@ import { describeTool } from "./describeTool";
 import {
 	addJobPrompt,
 	answersPrompt,
+	correctionsPrompt,
 	documentsPrompt,
 	linksPrompt,
 	onboardingPrompt,
@@ -35,6 +36,8 @@ type Delegation = { applicationId?: string; step: string };
 
 const ACTIVITY_LIMIT = 400;
 const ANSWER_SETTLE_MS = 6000;
+// Longer than for answers: someone correcting one answer is often about to correct another.
+const CORRECTION_SETTLE_MS = 20_000;
 const COORDINATOR = "coordinator";
 const UNUSED_TOOLS = [
 	"AskUserQuestion",
@@ -69,6 +72,8 @@ class AgentManager {
 	private persisted: Persisted = {};
 	private saveTimer: NodeJS.Timeout | null = null;
 	private answersTimer: NodeJS.Timeout | null = null;
+	private corrections: string[] = [];
+	private correctionsTimer: NodeJS.Timeout | null = null;
 	private delegations = new Map<string, Delegation>();
 	private paused = false;
 	/** The user has the agent's browser open, and its profile cannot be open twice. */
@@ -128,6 +133,19 @@ class AgentManager {
 			prompt: submitPrompt(applicationId),
 			submitAllowed: true,
 		});
+	}
+
+	/**
+	 * The user corrected or withdrew something they had told the agent. The corrections of one sitting
+	 * are gathered and handled in one run.
+	 */
+	factsCorrected(change: string) {
+		this.corrections.push(change);
+		if (this.correctionsTimer) clearTimeout(this.correctionsTimer);
+		this.correctionsTimer = setTimeout(() => {
+			const changes = this.corrections.splice(0);
+			if (changes.length) this.enqueue({ label: "Using your corrections", prompt: correctionsPrompt(changes) });
+		}, CORRECTION_SETTLE_MS);
 	}
 
 	answersArrived() {

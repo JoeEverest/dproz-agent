@@ -34,7 +34,7 @@ The main screen is the board. Nothing has to be asked for:
 - After setup the agent reads your documents and writes `about-me.md`, its memory of who you are, and your master resume: your whole history, rewritten to the resume standard below. Every application's resume is tailored from it.
 - A source can also be a link, pasted where documents are added. A link to a file (a resume PDF, a Google Doc or Drive file shared with anyone who has the link) is downloaded and becomes a document. A link to a page (a portfolio, a profile) is kept as a link, and the agent reads the page itself, in its browser when the page needs a sign-in.
 - It then searches Dproz on a timer (every 6 hours by default; 4 hours, twice a day and daily are the other choices), looking at jobs posted since the last search. There is no cap: every real fit is pursued.
-- When it needs something only you know, the question appears on the Questions screen, as a chat. A requirement a job asks for that nothing you have given it shows is a quick question: **I have it** or **Not yet**, one click, as in Dproz Fit Check. Quick questions come first. What you have is then followed up with a deeper question (where you used it, what came of it), which you can skip. Every answer is kept in `facts.json`, so it is asked once: the same requirement on another job is answered for you.
+- When it needs something only you know, the question appears on the Questions screen, as a chat. A requirement a job asks for that nothing you have given it shows is a quick question: **I have it** or **Not yet**, one click, as in Dproz Fit Check. Quick questions come first. What you have is then followed up with a deeper question (where you used it, what came of it), which you can skip. Every answer is kept in `facts.json`, so it is asked once: the same requirement on another job is answered for you. Answers are listed under **Your answers** in Profile settings, where each can be corrected or removed. The agent then takes the old answer off what it knows and off your master resume, prepares again any application that relied on it and has not been sent, and tells you if one already sent claimed it.
 - Each card lists the documents written for that job; clicking one slides a preview out beside the card, with a Download button that saves a copy.
 - **Add a job** takes a link or pasted posting for a job you found yourself, to apply to or only prepare.
 - Pause stops the current run and holds everything until you resume.
@@ -124,6 +124,7 @@ npm run build
 node tests/e2e/run.mjs platform       # setup, board, questions panel, drawer, settings, vault (no agent run)
 node tests/e2e/run.mjs gallery        # screenshots of every screen, light and dark, with demo cards
 node tests/e2e/run.mjs full           # the whole autonomous flow against a local mock jobs feed and careers portal
+node tests/e2e/run.mjs corrections    # the agent takes a corrected answer off about-me.md and the master resume
 node tests/e2e/run.mjs links          # the agent reads a linked page into about-me.md, against a local page
 node tests/e2e/run.mjs browser        # you sign in through the agent's browser, then its next run is signed in (opens a Chromium window)
 npm run pack && node tests/e2e/run.mjs packaged   # the packaged app, including a prepare-only agent run

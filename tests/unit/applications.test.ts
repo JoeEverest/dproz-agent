@@ -129,4 +129,37 @@ describe("application store", () => {
 		// One fact, not three: the copies are the same answer.
 		expect((await store.listFacts()).filter((fact) => store.sameItem(fact.item, "Sage 300"))).toHaveLength(1);
 	});
+
+	it("corrects and forgets a fact, and says what changed", async () => {
+		const { application } = await store.createApplication(job);
+		const asked = await store.askApplicationQuestions(application.id, [{ item: "Power BI", category: "skills" }]);
+		await store.answerApplicationQuestion(application.id, asked.questions[0].id, { have: true });
+		const [fact] = await store.listFacts();
+
+		const unchanged = await store.correctFact(fact.id ?? "", { answer: "I have it.", have: true });
+		expect(unchanged.change).toBeNull();
+
+		const corrected = await store.correctFact(fact.id ?? "", { answer: "I do not have it.", have: false });
+		expect(corrected.change).toBe('Power BI: they first said "I have it.". The right answer is "I do not have it.".');
+		expect(corrected.facts[0]).toMatchObject({ id: fact.id, have: false, answer: "I do not have it." });
+		expect(corrected.facts[0].correctedAt).toBeTruthy();
+		// The corrected answer is what a later question about the same thing gets back.
+		expect((await store.knownFact("power bi"))?.have).toBe(false);
+
+		const removed = await store.removeFact(fact.id ?? "");
+		expect(removed.change).toContain("withdrawn");
+		expect(await store.listFacts()).toEqual([]);
+		expect(await store.knownFact("Power BI")).toBeUndefined();
+	});
+
+	it("gives ids to facts kept before they could be edited", async () => {
+		const file = path.join(state.workspaceDir, "facts.json");
+		await fs.writeFile(
+			file,
+			JSON.stringify([{ at: "2026-11-14T00:00:00.000Z", question: "Notice?", answer: "One month" }]),
+		);
+		const [first] = await store.listFacts();
+		expect(first.id).toBeTruthy();
+		expect((await store.listFacts())[0].id).toBe(first.id);
+	});
 });

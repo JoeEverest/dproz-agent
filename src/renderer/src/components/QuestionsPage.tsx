@@ -1,4 +1,4 @@
-import { awaitingChoice, type QuestionReply } from "@shared/application";
+import { awaitingChoice, HAVE_IT, haveDetail, type QuestionReply } from "@shared/application";
 import { Textarea } from "@ui-sdk/react/textarea";
 import { ArrowUp, Bot, Briefcase, CheckCheck, ChevronLeft, ChevronRight, CornerDownRight } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -99,8 +99,6 @@ function UserMessage({ question, text }: { question: OpenQuestion; text: string 
 	);
 }
 
-const HAVE = "I have it.";
-
 /**
  * One question as the messages it has produced so far. A quick question reads as a short exchange:
  * the requirement, the one-click answer, then the follow-up and its answer.
@@ -114,9 +112,8 @@ function exchange(question: OpenQuestion, props: Omit<AgentMessageProps, "questi
 		return question.answer ? [ask, reply("a", question.answer)] : [ask];
 	}
 	if (!question.have) return [ask, reply("a", "Not yet")];
-	const detail = question.answer?.startsWith(HAVE)
-		? question.answer.slice(HAVE.length).trim()
-		: (question.answer ?? "");
+	const detail =
+		haveDetail(question.answer ?? "") || (question.answer?.startsWith(HAVE_IT) ? "" : (question.answer ?? ""));
 	const messages = [ask];
 	if (!question.followUp) return [...messages, reply("a", "I have it")];
 	messages.push(

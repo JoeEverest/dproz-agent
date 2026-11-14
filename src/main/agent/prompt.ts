@@ -290,6 +290,18 @@ export const answersPrompt = `The user has answered some of your questions. Call
 
 This run is only for those answers and those cards. Do not search for new jobs.`;
 
+export function correctionsPrompt(changes: string[]) {
+	return `The user has corrected what they told you. facts.json already holds the corrected answers.
+
+${changes.map((change) => `- ${change}`).join("\n")}
+
+1. Bring about-me.md in line with each correction, and save the master resume again with save_master_resume if a correction changes anything on it. Something they no longer have comes off. Something withdrawn is unknown again: take it off, and ask only if a job needs it.
+2. Check the board. For every card at found, needs_input or ready_to_submit whose fit check, resume or cover letter relied on the old answer, put it back through prepare and judge with the correction quoted in the writer's brief. A card that no longer fits is closed with the reason.
+3. Applications already sent cannot be changed. If one of them claimed something that is now corrected, say which in your summary and add it to that card's notes, so the user knows before an interview.
+
+This run is only for these corrections. Do not search for new jobs.`;
+}
+
 export function submitPrompt(id: string) {
 	return `The user has reviewed card "${id}" on the board and wants it sent now, whatever its hold field says. Check it has been judged (if not, start an application-judge first), then start an application-sender for applications/${id}.`;
 }

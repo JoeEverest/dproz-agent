@@ -1,3 +1,4 @@
+import { type Fact, haveAnswer, haveDetail, REQUIREMENT_LABELS } from "@shared/application";
 import type { LinkAdded, Settings, SetupStatus, UpdateInfo, WorkspaceDocument } from "@shared/ipc";
 import { linkParts } from "@shared/links";
 import { PasswordInput, PasswordInputControl, PasswordInputToggle } from "@ui-sdk/react/password-input";
@@ -11,7 +12,7 @@ import { Markdown } from "./Markdown";
 import { PageHeader } from "./PageHeader";
 import { ModelChoice, ProviderForm } from "./ProviderForm";
 import { UpdateButton, updateNote } from "./UpdateControl";
-import { Button, Field, IconButton, Input, Notice, Picker, Textarea, Toggle } from "./ui";
+import { Button, Chip, Field, IconButton, Input, Notice, Picker, Textarea, Toggle } from "./ui";
 
 type GroupProps = { title: string; note?: string; action?: ReactNode; children: ReactNode };
 
@@ -221,6 +222,151 @@ function AboutGroup() {
 				</div>
 			) : (
 				<p className="px-4 py-4 text-ink-3">Nothing yet. The agent writes this once it has read your documents.</p>
+			)}
+		</Group>
+	);
+}
+
+type FactRowProps = {
+	fact: Fact;
+	onCorrect: (answer: string, have?: boolean) => Promise<void>;
+	onRemove: () => Promise<void>;
+};
+
+/** One thing the user told the agent. A requirement is corrected with the same two answers it was asked with. */
+function FactRow({ fact, onCorrect, onRemove }: FactRowProps) {
+	const quick = Boolean(fact.item) && fact.have !== undefined;
+	const subject = fact.item ?? fact.question;
+	const [editing, setEditing] = useState(false);
+	const [have, setHave] = useState(fact.have ?? true);
+	const [text, setText] = useState("");
+	const [saving, setSaving] = useState(false);
+	const shown = quick ? haveDetail(fact.answer) : fact.answer;
+
+	const start = () => {
+		setHave(fact.have ?? true);
+		setText(shown);
+		setEditing(true);
+	};
+	const answer = quick ? haveAnswer(have, text) : text.trim();
+	const save = async () => {
+		setSaving(true);
+		try {
+			await onCorrect(answer, quick ? have : undefined);
+			setEditing(false);
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	if (editing) {
+		return (
+			<li className="border-b border-line px-4 py-3.5 last:border-b-0">
+				<p className="selectable font-medium">{subject}</p>
+				{quick && (
+					<Picker
+						label={`Do you have this: ${subject}`}
+						className="mt-2"
+						value={have ? "have" : "lack"}
+						onChange={(value) => setHave(value === "have")}
+						options={[
+							{ value: "have", label: "I have it" },
+							{ value: "lack", label: "I do not have it" },
+						]}
+					/>
+				)}
+				{(!quick || have) && (
+					<Textarea
+						className="mt-2 max-h-40"
+						rows={2}
+						autoResize
+						value={text}
+						onValueChange={(value) => setText(value)}
+						placeholder={quick ? "Where you used it and what came of it (optional)" : "Your answer"}
+						aria-label={quick ? `More about ${subject}` : subject}
+					/>
+				)}
+				<div className="mt-2.5 flex justify-end gap-2">
+					<Button size="sm" tone="quiet" onClick={() => setEditing(false)}>
+						Cancel
+					</Button>
+					<Button size="sm" tone="primary" disabled={!answer || saving} onClick={() => void save()}>
+						{saving ? "Saving" : "Save"}
+					</Button>
+				</div>
+			</li>
+		);
+	}
+
+	return (
+		<li className="flex items-start gap-3 border-b border-line px-4 py-3.5 last:border-b-0">
+			<div className="min-w-0 flex-1">
+				<p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+					<span className="selectable font-medium text-pretty">{subject}</span>
+					{quick && (
+						<Chip tone={fact.have ? "success" : "attention"}>{fact.have ? "You have it" : "You do not have it"}</Chip>
+					)}
+				</p>
+				{shown && <p className="selectable mt-0.5 whitespace-pre-wrap text-ink-2">{shown}</p>}
+				<p className="mt-1 text-xs text-ink-3">
+					{[
+						fact.category && REQUIREMENT_LABELS[fact.category],
+						fact.about && `Asked for ${fact.about}`,
+						fact.correctedAt ? `Corrected ${relativeTime(fact.correctedAt)}` : `Answered ${relativeTime(fact.at)}`,
+					]
+						.filter(Boolean)
+						.join(" · ")}
+				</p>
+			</div>
+			<div className="flex shrink-0 gap-1">
+				<IconButton label={`Correct your answer about ${subject}`} onClick={start}>
+					<Pencil size={14} strokeWidth={1.75} aria-hidden />
+				</IconButton>
+				<IconButton label={`Remove your answer about ${subject}`} onClick={() => void onRemove()}>
+					<Trash2 size={14} strokeWidth={1.75} aria-hidden />
+				</IconButton>
+			</div>
+		</li>
+	);
+}
+
+function AnswersGroup() {
+	const facts = useResource(() => window.desk.facts.list(), ["inbox:changed", "applications:changed"]);
+	const agent = useAgentState();
+	const [changed, setChanged] = useState(false);
+	// Newest first: the answer someone has come to correct is usually a recent one.
+	const list = [...(facts.data ?? [])].sort((a, b) => b.at.localeCompare(a.at));
+
+	const apply = async (next: Promise<Fact[]>) => {
+		facts.setData(await next);
+		setChanged(true);
+	};
+
+	return (
+		<Group
+			title="Your answers"
+			note="What you have told the agent, kept so nothing is asked twice. Correct an answer and the agent brings what it knows about you, your resume and the applications it is still preparing in line."
+		>
+			{list.length === 0 ? (
+				<p className="px-4 py-4 text-ink-3">Nothing yet. Your answers to the agent's questions are kept here.</p>
+			) : (
+				<ul>
+					{list.map((fact) => (
+						<FactRow
+							key={fact.id}
+							fact={fact}
+							onCorrect={(answer, have) => apply(window.desk.facts.correct(fact.id ?? "", { answer, have }))}
+							onRemove={() => apply(window.desk.facts.remove(fact.id ?? ""))}
+						/>
+					))}
+				</ul>
+			)}
+			{changed && (
+				<p role="status" className="border-t border-line px-4 py-2.5 text-xs text-ink-2">
+					{agent.paused
+						? "Saved. The agent will act on it when you resume it."
+						: "Saved. The agent will act on it shortly: you will see “Using your corrections” on the Jobs screen."}
+				</p>
 			)}
 		</Group>
 	);
@@ -636,6 +782,7 @@ export function ProfilePage() {
 		<Page title="Profile settings">
 			<DocumentsGroup />
 			<AboutGroup />
+			<AnswersGroup />
 			<LoginsGroup />
 		</Page>
 	);

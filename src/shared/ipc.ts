@@ -1,4 +1,4 @@
-import type { Application, ApplicationStatus, Question, QuestionReply } from "./application";
+import type { Application, ApplicationStatus, Fact, FactCorrection, Question, QuestionReply } from "./application";
 
 export type Settings = {
 	workspaceDir: string;
@@ -171,6 +171,11 @@ export type DeskApi = {
 		list(): Promise<InboxQuestion[]>;
 		answer(questionId: string, reply: QuestionReply): Promise<InboxQuestion[]>;
 	};
+	facts: {
+		list(): Promise<Fact[]>;
+		correct(id: string, correction: FactCorrection): Promise<Fact[]>;
+		remove(id: string): Promise<Fact[]>;
+	};
 	credentials: {
 		list(): Promise<CredentialSummary[]>;
 		save(input: CredentialInput): Promise<CredentialSummary[]>;
@@ -234,6 +239,7 @@ export const DESK_METHODS = {
 		"addJob",
 	],
 	inbox: ["list", "answer"],
+	facts: ["list", "correct", "remove"],
 	credentials: ["list", "save", "remove"],
 	agent: ["state", "activity", "onboard", "documentsAdded", "linksAdded", "setPaused", "stop"],
 	help: ["current", "respond"],

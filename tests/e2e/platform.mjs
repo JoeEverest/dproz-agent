@@ -370,6 +370,51 @@ try {
 	await window.getByRole("button", { name: /Remove the link to/ }).waitFor({ state: "detached" });
 	check("a link can be removed", (await savedLinks()).length === 0);
 
+	// Answers can be corrected, and the agent is told what changed.
+	const answers = window.getByRole("region", { name: "Your answers" });
+	await answers.scrollIntoViewIfNeeded();
+	await answers.getByText("Power BI", { exact: true }).waitFor({ timeout: 10_000 });
+	const savedFacts = async () => JSON.parse(await fs.readFile(path.join(sandbox.workspace, "facts.json"), "utf8"));
+	check(
+		"every answer is listed in Profile settings",
+		(await answers.getByRole("listitem").count()) === (await savedFacts()).length,
+		`${await answers.getByRole("listitem").count()} answers`,
+	);
+	console.log(await shot(window, `platform-${process.platform}-answers`));
+	await answers.getByRole("button", { name: "Correct your answer about Power BI" }).click();
+	await answers.getByRole("combobox", { name: "Do you have this: Power BI" }).click();
+	await window.getByRole("option", { name: "I do not have it" }).click();
+	console.log(await shot(window, `platform-${process.platform}-answer-edit`));
+	await answers.getByRole("button", { name: "Save" }).click();
+	await answers.getByText("Saved. The agent will act on it").waitFor({ timeout: 10_000 });
+	const corrected = (await savedFacts()).find((fact) => fact.item === "Power BI");
+	check(
+		"a corrected answer replaces the old one",
+		corrected.have === false && corrected.answer === "I do not have it." && Boolean(corrected.correctedAt),
+		corrected.answer,
+	);
+	await answers.getByRole("button", { name: "Correct your answer about Do you hold a driving licence?" }).click();
+	await answers.getByRole("textbox", { name: "Do you hold a driving licence?" }).fill("Yes, class B and C");
+	await answers.getByRole("button", { name: "Save" }).click();
+	await answers.getByText("Yes, class B and C").waitFor({ timeout: 10_000 });
+	const factCount = (await savedFacts()).length;
+	await answers.getByRole("button", { name: "Remove your answer about SAP" }).click();
+	await answers.getByText("SAP", { exact: true }).waitFor({ state: "detached" });
+	check(
+		"an answer can be reworded or removed",
+		(await savedFacts()).length === factCount - 1 &&
+			(await savedFacts()).some((fact) => fact.answer === "Yes, class B and C"),
+	);
+	// The corrections of one sitting are gathered into one run, which waits while the agent is paused.
+	const waitForRun = async () => {
+		for (let waited = 0; waited < 40_000; waited += 1000) {
+			if ((await window.evaluate(() => window.desk.agent.state())).queued === 3) return true;
+			await window.waitForTimeout(1000);
+		}
+		return false;
+	};
+	check("the agent is handed the corrections in one run", await waitForRun());
+
 	await window.getByRole("navigation").getByRole("button", { name: "Settings", exact: true }).click();
 	await window.getByRole("heading", { name: "Settings", exact: true }).waitFor();
 	check(

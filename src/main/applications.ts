@@ -7,7 +7,9 @@ import {
 	type ApplicationStatus,
 	applicationSchema,
 	type Fact,
+	type FactCorrection,
 	factSchema,
+	haveAnswer,
 	type Question,
 	type QuestionReply,
 	questionSchema,
@@ -193,20 +195,63 @@ export function applyReply(question: Question, reply: QuestionReply): Question {
 		deliveredAt: undefined,
 	});
 	if (typeof reply !== "string") {
-		if (!reply.have) return settled({ have: false, answer: "I do not have it." });
-		return question.followUp ? { ...question, have: true } : settled({ have: true, answer: "I have it." });
+		if (!reply.have) return settled({ have: false, answer: haveAnswer(false) });
+		return question.followUp ? { ...question, have: true } : settled({ have: true, answer: haveAnswer(true) });
 	}
 	const text = reply.trim();
-	if (question.item && question.have) return settled({ answer: text ? `I have it. ${text}` : "I have it." });
+	if (question.item && question.have) return settled({ answer: haveAnswer(true, text) });
 	return settled({ answer: text });
 }
 
 export async function listFacts(): Promise<Fact[]> {
 	const { facts } = await workspacePaths();
-	return z
+	const stored = z
 		.array(factSchema)
 		.catch([])
 		.parse(await readJson<unknown>(facts, []));
+	// Facts kept before they could be edited have no id. Give each one, once.
+	if (stored.every((fact) => fact.id)) return stored;
+	const named = stored.map((fact) => (fact.id ? fact : { ...fact, id: randomUUID() }));
+	await writeJson(facts, named);
+	return named;
+}
+
+/**
+ * Corrects one fact. Returns the list and a line saying what changed, for the agent to act on.
+ * The change is not copied back to the card that asked: its history stays as it was answered.
+ */
+export function correctFact(id: string, correction: FactCorrection): Promise<{ facts: Fact[]; change: string | null }> {
+	return serialized(async () => {
+		const { facts } = await workspacePaths();
+		const all = await listFacts();
+		const before = all.find((fact) => fact.id === id);
+		const answer = correction.answer.trim();
+		if (!before || !answer || (before.answer === answer && before.have === correction.have)) {
+			return { facts: all, change: null };
+		}
+		const after = { ...before, answer, have: correction.have, correctedAt: now() };
+		const next = all.map((fact) => (fact.id === id ? after : fact));
+		await writeJson(facts, next);
+		const subject = before.item ?? before.question;
+		return { facts: next, change: `${subject}: they first said "${before.answer}". The right answer is "${answer}".` };
+	});
+}
+
+/** Forgets one fact, so the agent may ask again. */
+export function removeFact(id: string): Promise<{ facts: Fact[]; change: string | null }> {
+	return serialized(async () => {
+		const { facts } = await workspacePaths();
+		const all = await listFacts();
+		const gone = all.find((fact) => fact.id === id);
+		if (!gone) return { facts: all, change: null };
+		const next = all.filter((fact) => fact.id !== id);
+		await writeJson(facts, next);
+		const subject = gone.item ?? gone.question;
+		return {
+			facts: next,
+			change: `${subject}: they said "${gone.answer}" and have now withdrawn that answer. Treat it as unknown.`,
+		};
+	});
 }
 
 /** The fact that already settles a quick question, if the user has answered it before. */
@@ -220,12 +265,23 @@ export async function knownFact(item: string) {
  */
 async function settle(asked: Question, about?: string) {
 	// "I have it" is a fact from the moment it is clicked, whether or not the follow-up gets an answer.
-	const question = !asked.answer && asked.item && asked.have ? { ...asked, answer: "I have it." } : asked;
+	const question = !asked.answer && asked.item && asked.have ? { ...asked, answer: haveAnswer(true) } : asked;
 	if (!question.answer) return;
 	const { facts } = await workspacePaths();
 	const { item, category, have, answer } = question;
-	const fact = factSchema.parse({ at: now(), question: question.question, answer, item, category, have, about });
-	await writeJson(facts, [...(await listFacts()), fact]);
+	const fact = factSchema.parse({
+		id: randomUUID(),
+		at: now(),
+		question: question.question,
+		answer,
+		item,
+		category,
+		have,
+		about,
+	});
+	// One fact for each requirement: a later answer replaces an earlier one.
+	const kept = (await listFacts()).filter((earlier) => !item || !sameItem(earlier.item, item));
+	await writeJson(facts, [...kept, fact]);
 	if (!item) return;
 
 	const waiting = (other: Question) => other.id !== question.id && !other.answer && sameItem(other.item, item);

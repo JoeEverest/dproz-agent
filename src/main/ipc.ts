@@ -8,10 +8,13 @@ import {
 	answerApplicationQuestion,
 	answerInboxQuestion,
 	applicationFolder,
+	correctFact,
 	listApplications,
+	listFacts,
 	listInbox,
 	patchApplication,
 	removeApplication,
+	removeFact,
 	watchApplications,
 } from "./applications";
 import { claudeStatus } from "./claude";
@@ -133,6 +136,19 @@ const handlers: Handlers = {
 			const inbox = await answerInboxQuestion(questionId, answer);
 			agent.answersArrived();
 			return inbox;
+		},
+	},
+	facts: {
+		list: listFacts,
+		correct: async (id, correction) => {
+			const { facts, change } = await correctFact(id, correction);
+			if (change) agent.factsCorrected(change);
+			return facts;
+		},
+		remove: async (id) => {
+			const { facts, change } = await removeFact(id);
+			if (change) agent.factsCorrected(change);
+			return facts;
 		},
 	},
 	credentials: { list: listCredentials, save: saveCredential, remove: removeCredential },
