@@ -74,7 +74,7 @@ try {
 	check("no search starts before the next one is due", idle.status === "idle" && Boolean(idle.nextSweepAt));
 
 	await window.getByRole("button", { name: "Add a job" }).click();
-	await window.getByRole("textbox", { name: "Job link or posting" }).fill(`${ats.origin}/jobs/finance-officer`);
+	await window.getByRole("textbox", { name: "Job links or posting" }).fill(`${ats.origin}/jobs/finance-officer`);
 	await window.getByRole("button", { name: "Prepare only" }).click();
 
 	const deadline = Date.now() + 25 * 60_000;

@@ -13,7 +13,11 @@ export default defineConfig(({ mode }) => {
 	return {
 		main: {
 			resolve: { alias: { "@shared": shared } },
-			define: { __DPROZ_API_KEY__: JSON.stringify(env.DPROZ_API_KEY ?? "") },
+			define: {
+				__DPROZ_API_KEY__: JSON.stringify(env.DPROZ_API_KEY ?? ""),
+				// The PostHog project key for anonymous usage figures. Without it the app sends none.
+				__POSTHOG_KEY__: JSON.stringify(env.DPROZ_AGENT_POSTHOG_KEY ?? ""),
+			},
 		},
 		preload: {
 			resolve: { alias: { "@shared": shared } },

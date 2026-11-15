@@ -11,6 +11,7 @@ import {
 } from "@shared/application";
 import { RESUME_SECTIONS, RESUME_TEMPLATE_IDS, RESUME_TEMPLATES, resumeSchema } from "@shared/resume";
 import { z } from "zod";
+import { helpRequested, questionsAsked } from "../analytics";
 import {
 	applicationFolder,
 	askApplicationQuestions,
@@ -180,6 +181,7 @@ Never ask the user to explain, quantify or expand on what is already in about-me
 					for (const question of questions) {
 						if (!question.item && !question.question?.trim()) throw new Error("Each question needs question or item.");
 					}
+					questionsAsked(questions, applicationId ? "application" : "general");
 					if (applicationId) await askApplicationQuestions(applicationId, questions);
 					else {
 						await askInboxQuestions(questions);
@@ -207,7 +209,9 @@ Never ask the user to explain, quantify or expand on what is already in about-me
 					applicationId: z.string().optional(),
 				},
 				guarded(async ({ instruction, applicationId }) => {
+					const askedAt = Date.now();
 					const outcome = await requestHelp(instruction, applicationId);
+					helpRequested(instruction, outcome, Date.now() - askedAt);
 					if (outcome === "done") return "The user says it is done. Take a fresh snapshot of the page and continue.";
 					if (outcome === "declined")
 						return "The user could not do it now. Use ask_user to record what is needed, then move on.";

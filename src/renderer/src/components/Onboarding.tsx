@@ -171,6 +171,10 @@ export function Onboarding({ onDone }: { onDone: () => Promise<void> }) {
 					</Button>
 					<p className="text-sm text-ink-3">It reads your documents first, then starts searching on its own.</p>
 				</div>
+				<p className="mt-4 text-xs text-ink-3">
+					The app shares anonymous usage figures, such as models, costs and how far applications get. Never your name,
+					documents, answers or which jobs. You can turn this off in Settings.
+				</p>
 			</div>
 		</div>
 	);

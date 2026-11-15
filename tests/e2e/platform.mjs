@@ -5,8 +5,22 @@ import { createSandbox, launchApp, shot } from "./harness.mjs";
 
 // A stand-in for the download site, so the update check never leaves this machine.
 let latestVersion = "0.0.1";
+// ...and for PostHog: what the app reports as usage is kept here and goes nowhere else.
+const reported = [];
 const updates = http.createServer((request, response) => {
 	response.setHeader("content-type", "application/json");
+	if (request.url.startsWith("/batch")) {
+		let body = "";
+		request.on("data", (chunk) => {
+			body += chunk;
+		});
+		request.on("end", () => {
+			const { api_key, batch } = JSON.parse(body);
+			for (const item of batch) reported.push({ ...item, api_key });
+			response.end(JSON.stringify({ status: 1 }));
+		});
+		return;
+	}
 	// Also stands in for the Anthropic API when a key is checked: it refuses exactly one key.
 	// ...and for another endpoint: it refuses one token and does not know one model.
 	if (request.url.startsWith("/v1/messages")) {
@@ -71,6 +85,8 @@ const { app, window } = await launchApp(sandbox, {
 	DPROZ_AGENT_UPDATE_URL: updateUrl,
 	DPROZ_AGENT_ANTHROPIC_URL: new URL(updateUrl).origin,
 	DPROZ_AGENT_SAVE_TO: saveTo,
+	DPROZ_AGENT_POSTHOG_KEY: "phc_test",
+	DPROZ_AGENT_POSTHOG_HOST: new URL(updateUrl).origin,
 });
 const results = [];
 const check = (name, passed, detail = "") => {
@@ -284,7 +300,7 @@ try {
 	check("Escape closes the drawer", (await window.getByRole("dialog").count()) === 0);
 
 	await window.getByRole("button", { name: "Add a job" }).click();
-	await window.getByRole("textbox", { name: "Job link or posting" }).waitFor();
+	await window.getByRole("textbox", { name: "Job links or posting" }).waitFor();
 	check(
 		"Add a job opens, with both actions disabled until something is pasted",
 		await window.getByRole("button", { name: "Apply for me" }).isDisabled(),
@@ -526,6 +542,56 @@ try {
 		(await window.getByRole("button", { name: "Download 9.9.9" }).count()) === 1,
 	);
 	console.log(await shot(window, `platform-${process.platform}`));
+
+	// Usage figures: what is reported, what is not, and the switch that stops it.
+	const event = (name) => reported.find((item) => item.event === name);
+	const arrives = async (name) => {
+		for (let waited = 0; waited < 25 && !event(name); waited++) await window.waitForTimeout(1000);
+		return event(name);
+	};
+	const opened = await arrives("app opened");
+	check(
+		"the app reports that it was opened, with its version, platform and model and no person profile",
+		opened?.api_key === "phc_test" &&
+			/^[0-9a-f-]{36}$/.test(opened.properties.distinct_id) &&
+			opened.properties.platform === process.platform &&
+			Boolean(opened.properties.app_version) &&
+			opened.properties.$process_person_profile === false,
+		JSON.stringify(opened?.properties),
+	);
+	check(
+		"a quick answer is reported as a click, not as words",
+		reported.some(
+			(item) => item.event === "question answered" && item.properties.kind === "quick" && item.properties.have === true,
+		) && reported.some((item) => item.event === "question answered" && item.properties.kind === "typed"),
+	);
+	await window.evaluate(() => window.desk.applications.setStatus("beta-analyst", "applied"));
+	const applied = await arrives("application applied");
+	check(
+		"a card moved to Applied is reported, by whom and how it is sent, under a hash",
+		applied?.properties.by === "user" &&
+			applied.properties.from === "needs_input" &&
+			applied.properties.apply_method === "url" &&
+			/^[0-9a-f]{16}$/.test(applied.properties.application) &&
+			event("application completed")?.properties.outcome === "applied",
+		JSON.stringify(applied?.properties),
+	);
+	const everything = JSON.stringify(reported);
+	const personal = ["Beta", "Finance Analyst", "Acme", "Accountant", "Rehema", "class B", "Power BI", sandbox.base];
+	const leaked = personal.filter((text) => everything.includes(text));
+	check("nothing reported names the user, a job, an employer or an answer", leaked.length === 0, leaked.join(", "));
+
+	await window.getByRole("switch", { name: "Share anonymous usage figures" }).click();
+	await window.waitForTimeout(500);
+	const reportedSoFar = reported.length;
+	await window.evaluate(() => window.desk.applications.setStatus("beta-analyst", "interview"));
+	await window.waitForTimeout(18_000);
+	check(
+		"with sharing switched off nothing more is reported",
+		reported.length === reportedSoFar && (await window.evaluate(() => window.desk.settings.get())).shareUsage === false,
+		`${reported.length - reportedSoFar} more`,
+	);
+	await shot(window, `platform-${process.platform}-settings`);
 } catch (error) {
 	check("no harness error", false, error.stack);
 	await shot(window, `platform-${process.platform}-failure`).catch(() => {});

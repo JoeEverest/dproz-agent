@@ -401,7 +401,7 @@ function ProviderGroup({ setup }: { setup: SetupResource }) {
 	);
 }
 
-function AboutAppGroup({ update }: { update: UpdateInfo | null }) {
+function AboutAppGroup({ settings, onChange, update }: Props & { update: UpdateInfo | null }) {
 	const [checking, setChecking] = useState(false);
 
 	const check = async () => {
@@ -437,6 +437,17 @@ function AboutAppGroup({ update }: { update: UpdateInfo | null }) {
 					)
 				}
 			/>
+			<Row
+				title="Share anonymous usage figures"
+				note="Which models are used, what a run costs, and how far each application gets and through which website. Never your name, your documents, your answers, or which jobs and employers."
+				control={
+					<Toggle
+						label="Share anonymous usage figures"
+						checked={settings.shareUsage}
+						onChange={async (shareUsage) => onChange(await window.desk.settings.update({ shareUsage }))}
+					/>
+				}
+			/>
 		</Group>
 	);
 }
@@ -459,7 +470,7 @@ export function SettingsPage({ settings, onChange, update }: Props & { update: U
 			<AgentGroup settings={settings} onChange={onChange} setup={setup} />
 			<LoginsGroup />
 			<ProviderGroup setup={setup} />
-			<AboutAppGroup update={update} />
+			<AboutAppGroup settings={settings} onChange={onChange} update={update} />
 		</Page>
 	);
 }

@@ -4,6 +4,7 @@ import type { DeskApi, SetupStatus } from "@shared/ipc";
 import { normaliseLink } from "@shared/links";
 import { app, dialog, ipcMain, shell } from "electron";
 import { agent } from "./agent/manager";
+import { questionAnswered, userMoved } from "./analytics";
 import {
 	answerApplicationQuestion,
 	answerInboxQuestion,
@@ -108,9 +109,13 @@ const handlers: Handlers = {
 	},
 	applications: {
 		list: listApplications,
-		setStatus: (id, status) => patchApplication(id, { status }),
+		setStatus: (id, status) => {
+			userMoved(id);
+			return patchApplication(id, { status });
+		},
 		answer: async (id, questionId, answer) => {
 			const application = await answerApplicationQuestion(id, questionId, answer);
+			questionAnswered(application.questions.find((question) => question.id === questionId));
 			agent.answersArrived();
 			return application;
 		},
@@ -135,6 +140,7 @@ const handlers: Handlers = {
 		list: listInbox,
 		answer: async (questionId, answer) => {
 			const inbox = await answerInboxQuestion(questionId, answer);
+			questionAnswered(inbox.find((question) => question.id === questionId));
 			agent.answersArrived();
 			return inbox;
 		},

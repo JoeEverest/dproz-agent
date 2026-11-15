@@ -2,7 +2,9 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { ActivityItem, AgentState } from "@shared/ipc";
+import { jobLinks } from "@shared/links";
 import { app } from "electron";
+import { runFinished, runStarted, track } from "../analytics";
 import { hasUndeliveredAnswers, listApplications } from "../applications";
 import { claudeEnvironment } from "../claude";
 import { connectionModel } from "../connection";
@@ -16,6 +18,7 @@ import { dprozServer } from "../tools/dproz";
 import { ensureWorkspace } from "../workspace";
 import { changedLines } from "./changes";
 import { describeTool } from "./describeTool";
+import { RunMeter } from "./meter";
 import {
 	addJobPrompt,
 	answersPrompt,
@@ -29,7 +32,9 @@ import {
 	systemPrompt,
 } from "./prompt";
 
-type RunRequest = { label: string; prompt: string; key?: string; submitAllowed?: boolean };
+type RunKind = "onboard" | "sweep" | "answers" | "documents" | "links" | "add_job" | "submit" | "profile_edit";
+
+type RunRequest = { kind: RunKind; label: string; prompt: string; key?: string; submitAllowed?: boolean };
 
 type Persisted = { lastSweepAt?: string };
 
@@ -63,6 +68,15 @@ function applicationIdIn(tool: string, input: Record<string, unknown>): string |
 	return /applications[\\/]+([a-z0-9-]+)/.exec(JSON.stringify(input))?.[1];
 }
 
+/** What a tool handed back, as text: a subagent's report arrives as text blocks. */
+function resultText(content: unknown): string {
+	if (typeof content === "string") return content;
+	if (!Array.isArray(content)) return "";
+	return content
+		.map((block) => (block?.type === "text" && typeof block.text === "string" ? block.text : ""))
+		.join("\n");
+}
+
 const dprozReachable = (fence: string | undefined) => !fence || (process.env.DPROZ_API_URL ?? "").startsWith(fence);
 
 class AgentManager {
@@ -77,6 +91,8 @@ class AgentManager {
 	private editedFrom: string | null = null;
 	private editTimer: NodeJS.Timeout | null = null;
 	private delegations = new Map<string, Delegation>();
+	private meter = new RunMeter();
+	private apiErrors: string[] = [];
 	private paused = false;
 	/** The user has the agent's browser open, and its profile cannot be open twice. */
 	private held = false;
@@ -113,23 +129,33 @@ class AgentManager {
 	}
 
 	onboard() {
-		this.enqueue({ label: "Reading your documents", key: "onboard", prompt: onboardingPrompt });
+		track("setup completed");
+		this.enqueue({ kind: "onboard", label: "Reading your documents", key: "onboard", prompt: onboardingPrompt });
 	}
 
 	documentsAdded(names: string[]) {
-		if (names.length) this.enqueue({ label: "Reading your documents", prompt: documentsPrompt(names) });
+		if (names.length) {
+			this.enqueue({ kind: "documents", label: "Reading your documents", prompt: documentsPrompt(names) });
+		}
 	}
 
 	linksAdded(urls: string[]) {
-		if (urls.length) this.enqueue({ label: "Reading your links", prompt: linksPrompt(urls) });
+		if (urls.length) this.enqueue({ kind: "links", label: "Reading your links", prompt: linksPrompt(urls) });
 	}
 
 	addJob(source: string, prepareOnly: boolean) {
-		this.enqueue({ label: "Working on the job you added", prompt: addJobPrompt(source, prepareOnly) });
+		const links = jobLinks(source);
+		track("job added", { links: links.length, pasted_text: links.length === 0, prepare_only: prepareOnly });
+		this.enqueue({
+			kind: "add_job",
+			label: links.length > 1 ? "Working on the jobs you added" : "Working on the job you added",
+			prompt: addJobPrompt(source, prepareOnly),
+		});
 	}
 
 	submit(applicationId: string) {
 		this.enqueue({
+			kind: "submit",
 			label: "Sending an application",
 			key: `submit:${applicationId}`,
 			prompt: submitPrompt(applicationId),
@@ -150,7 +176,11 @@ class AgentManager {
 			const change = changedLines(from, after);
 			if (!change.removed.length && !change.added.length) return;
 			if ((await listApplications()).length === 0) return;
-			this.enqueue({ label: "Using your changes", prompt: profileEditedPrompt(change.removed, change.added) });
+			this.enqueue({
+				kind: "profile_edit",
+				label: "Using your changes",
+				prompt: profileEditedPrompt(change.removed, change.added),
+			});
 		}, EDIT_SETTLE_MS);
 	}
 
@@ -158,7 +188,7 @@ class AgentManager {
 		if (this.answersTimer) clearTimeout(this.answersTimer);
 		this.answersTimer = setTimeout(async () => {
 			if (this.status !== "idle" || this.paused || this.held || !(await hasUndeliveredAnswers())) return;
-			this.enqueue({ label: "Using your answers", key: "answers", prompt: answersPrompt });
+			this.enqueue({ kind: "answers", label: "Using your answers", key: "answers", prompt: answersPrompt });
 		}, ANSWER_SETTLE_MS);
 	}
 
@@ -216,7 +246,12 @@ class AgentManager {
 		if (await hasUndeliveredAnswers()) return this.answersArrived();
 		const next = this.nextSweepAt();
 		if (next && Date.parse(next) > Date.now()) return;
-		this.enqueue({ label: "Looking for jobs", key: "sweep", prompt: sweepPrompt(this.persisted.lastSweepAt) });
+		this.enqueue({
+			kind: "sweep",
+			label: "Looking for jobs",
+			key: "sweep",
+			prompt: sweepPrompt(this.persisted.lastSweepAt),
+		});
 	}
 
 	private enqueue(request: RunRequest) {
@@ -237,6 +272,11 @@ class AgentManager {
 		const startedAt = stamp();
 		let finished = false;
 		let ending: string | undefined;
+		let failure: string | undefined;
+		let result: Extract<SDKMessage, { type: "result" }> | undefined;
+		this.meter = new RunMeter();
+		this.apiErrors = [];
+		runStarted(request.kind);
 
 		try {
 			const settings = await getSettings();
@@ -272,6 +312,7 @@ class AgentManager {
 				if (message.type === "result") {
 					finished = message.subtype === "success";
 					ending = message.subtype;
+					result = message;
 				}
 				this.handle(message);
 			}
@@ -279,13 +320,30 @@ class AgentManager {
 			if (finished) this.notice("success", `Finished in about ${minutes} min.`);
 			else if (ending) this.notice("error", `Run ended early (${ending.replaceAll("_", " ")}).`);
 		} catch (error) {
-			if (this.abort?.signal.aborted) this.notice("info", "Stopped.");
-			else this.notice("error", (error as Error).message);
+			if (this.abort?.signal.aborted) {
+				ending = "stopped";
+				this.notice("info", "Stopped.");
+			} else {
+				ending = "failed";
+				failure = (error as Error).message;
+				this.notice("error", failure);
+			}
 		} finally {
 			cancelHelp();
 			this.settleRunningTools();
 		}
 
+		void runFinished({
+			kind: request.kind,
+			outcome: ending ?? "ended",
+			durationMs: Date.now() - Date.parse(startedAt),
+			error: failure ?? (result?.subtype === "success" ? undefined : result?.errors?.[0]),
+			apiErrors: this.apiErrors,
+			costUsd: result?.total_cost_usd,
+			turns: result?.num_turns,
+			modelUsage: result?.modelUsage,
+			report: this.meter.settle(result?.total_cost_usd),
+		});
 		if (request.key === "sweep" && finished) this.persisted.lastSweepAt = startedAt;
 		this.abort = null;
 		this.status = "idle";
@@ -301,8 +359,13 @@ class AgentManager {
 	private handle(message: SDKMessage) {
 		if (message.type === "assistant") {
 			const parent = message.parent_tool_use_id;
-			if (message.error) this.notice("error", `Claude reported: ${message.error.replaceAll("_", " ")}`);
+			this.meter.spend(parent, message.message.id, message.message.usage);
+			if (message.error) {
+				this.apiErrors.push(message.error);
+				this.notice("error", `Claude reported: ${message.error.replaceAll("_", " ")}`);
+			}
 			const reportedBack = parent !== null && !message.message.content.some((block) => block.type === "tool_use");
+			if (reportedBack) this.meter.note(parent, resultText(message.message.content));
 			if (reportedBack && this.delegations.delete(parent)) this.publishState();
 			for (const block of message.message.content) {
 				if (block.type === "text" && block.text.trim() && parent === null) {
@@ -316,8 +379,11 @@ class AgentManager {
 					continue;
 				}
 				const delegated = block.name === "Agent" || block.name === "Task";
-				if (delegated) this.delegations.set(block.id, { applicationId: applicationIdIn(block.name, input), step });
-				else this.follow(COORDINATOR, block.name, input, step);
+				if (delegated) {
+					const applicationId = applicationIdIn(block.name, input);
+					this.delegations.set(block.id, { applicationId, step });
+					this.meter.begin(block.id, input.subagent_type, applicationId);
+				} else this.follow(COORDINATOR, block.name, input, step);
 				this.record({
 					id: block.id,
 					at: stamp(),
@@ -335,9 +401,17 @@ class AgentManager {
 			for (const block of message.message.content) {
 				if (block.type !== "tool_result") continue;
 				if (this.delegations.delete(block.tool_use_id)) this.publishState();
+				// A subagent in the background returns a placeholder here and reports later, in a notification.
+				const returned = (message.tool_use_result as { status?: string } | undefined)?.status === "completed";
+				if (block.is_error) this.meter.end(block.tool_use_id, "failed");
+				else if (returned) this.meter.end(block.tool_use_id, "completed", resultText(block.content));
+				else this.meter.note(block.tool_use_id, resultText(block.content));
 				this.settleTool(block.tool_use_id, block.is_error ? "error" : "done");
 			}
 			return;
+		}
+		if (message.type === "system" && message.subtype === "task_notification" && message.tool_use_id) {
+			this.meter.end(message.tool_use_id, message.status, message.summary);
 		}
 	}
 

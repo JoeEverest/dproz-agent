@@ -1,6 +1,7 @@
 import path from "node:path";
 import { app, BrowserWindow, Menu, nativeImage, nativeTheme, shell, Tray } from "electron";
 import { agent } from "./agent/manager";
+import { flushAnalytics, startAnalytics } from "./analytics";
 import { onStatusChange, watchApplications } from "./applications";
 import { loadConnection } from "./connection";
 import { registerIpc } from "./ipc";
@@ -101,6 +102,7 @@ if (!app.requestSingleInstanceLock()) {
 	app.on("second-instance", showWindow);
 	app.on("before-quit", () => {
 		quitting = true;
+		void flushAnalytics();
 		agent.stop();
 		closeUserBrowser();
 	});
@@ -121,6 +123,7 @@ if (!app.requestSingleInstanceLock()) {
 		await agent.load();
 		registerIpc();
 		onStatusChange(notifyStatus);
+		await startAnalytics();
 		await watchApplications();
 		tray = process.env.DPROZ_AGENT_NO_TRAY ? null : createTray();
 		mainWindow = createWindow();

@@ -26,7 +26,8 @@ export function AddJob() {
 			>
 				<PopoverTitle className="text-sm font-semibold">Add a job you found</PopoverTitle>
 				<PopoverDescription className="mt-0.5 text-ink-3">
-					Paste the link to the posting, or the posting itself. It gets a card on the board straight away.
+					Paste a link to the posting, several links one per line, or the posting itself. The agent reads each one and
+					puts it on the board. A job that takes applications by email is prepared for you to send.
 				</PopoverDescription>
 				<Textarea
 					className="mt-3 max-h-48"
@@ -35,7 +36,7 @@ export function AddJob() {
 					value={source}
 					onValueChange={(value) => setSource(value)}
 					placeholder="https://…"
-					aria-label="Job link or posting"
+					aria-label="Job links or posting"
 				/>
 				<div className="mt-3 flex justify-end gap-2">
 					<Button size="sm" disabled={!source.trim()} onClick={() => void add(true)}>

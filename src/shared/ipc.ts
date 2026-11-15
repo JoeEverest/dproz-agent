@@ -7,6 +7,8 @@ export type Settings = {
 	sweepIntervalHours: number;
 	model: string;
 	onboarded: boolean;
+	/** Send anonymous usage figures: models, costs and how far applications get. */
+	shareUsage: boolean;
 };
 
 export type ClaudeStatus =

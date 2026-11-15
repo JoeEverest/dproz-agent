@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { downloadAddress, linkParts, normaliseLink } from "../../src/shared/links";
+import { downloadAddress, jobLinks, linkParts, normaliseLink } from "../../src/shared/links";
 
 describe("normaliseLink", () => {
 	it("accepts a web address with or without https://", () => {
@@ -53,5 +53,19 @@ describe("linkParts", () => {
 	it("splits a link into the site and the page", () => {
 		expect(linkParts("https://www.linkedin.com/in/rehema/")).toEqual({ site: "linkedin.com", page: "/in/rehema" });
 		expect(linkParts("https://example.com/")).toEqual({ site: "example.com", page: "" });
+	});
+});
+
+describe("jobLinks", () => {
+	it("finds every link when links are all that was pasted", () => {
+		expect(jobLinks("https://a.example/jobs/1\n b.example/careers/2 , https://a.example/jobs/1")).toEqual([
+			"https://a.example/jobs/1",
+			"https://b.example/careers/2",
+		]);
+	});
+
+	it("treats a pasted posting as text, even with a link in it", () => {
+		expect(jobLinks("Accountant at Acme. Apply at https://acme.example/apply")).toEqual([]);
+		expect(jobLinks("")).toEqual([]);
 	});
 });

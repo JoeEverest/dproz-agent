@@ -1,4 +1,5 @@
 import type { AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
+import { jobLinks } from "@shared/links";
 import { BROWSER_SERVER } from "../runtime";
 
 export type RunMode = { submitAllowed: boolean; testOrigin?: string };
@@ -321,14 +322,24 @@ export function submitPrompt(id: string) {
 }
 
 export function addJobPrompt(source: string, prepareOnly: boolean) {
+	const links = jobLinks(source);
+	const several = links.length > 1;
 	const outcome = prepareOnly
-		? "The user wants it prepared but not sent: set hold to true on the card and stop at ready_to_submit."
-		: "Take it all the way through prepare, judge and send.";
-	return `The user has added a job themselves:
+		? `The user wants ${several ? "them" : "it"} prepared but not sent: set hold to true on ${several ? "each card" : "the card"} and stop at ready_to_submit.`
+		: `Take ${several ? "each one" : "it"} all the way through prepare, judge and send.`;
+	const added = several
+		? `The user has added these jobs themselves, one link each:\n\n${links.map((link) => `- ${link}`).join("\n")}`
+		: `The user has added a job themselves:\n\n${links[0] ?? source}`;
+	const find = several
+		? "Open each link and find the posting. Create a card for each one"
+		: "Find the posting (open the link, or work from the text). Create a card for it";
+	return `${added}
 
-${source}
+${find} even if the fit is not obvious, since the user chose it: do not skip or close it for being a stretch, and close it only if the posting has closed or the user plainly lacks something it will not consider them without. A link that fetch cannot read may need the browser: open it there before giving up. Set jobUrl to the link, so the same job is not added twice. Then run ${several ? "the cards" : "it"} through the usual steps. ${outcome}
 
-Find the posting (open the link, or work from the text), create a card for it even if the fit is not obvious, since the user chose it, and run it through the usual steps. ${outcome}
+A job that only takes applications by email cannot be sent from here, whatever the user chose: the writer prepares the resume, the cover letter and the email for them to send, and the card ends at manual.
 
-This run is only for this job. Do not search for others.`;
+If a link does not lead to a job posting, or cannot be opened at all, say which with ask_user and carry on with the rest.
+
+This run is only for ${several ? "these jobs" : "this job"}. Do not search for others.`;
 }

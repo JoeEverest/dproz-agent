@@ -62,6 +62,7 @@ jobs:
         run: npm run build && npx electron-builder --publish never
         env:
           DPROZ_API_KEY: ${{ secrets.DPROZ_API_KEY }}
+          DPROZ_AGENT_POSTHOG_KEY: ${{ secrets.DPROZ_AGENT_POSTHOG_KEY }}
           # Unsigned builds: no Developer ID certificate is configured.
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 

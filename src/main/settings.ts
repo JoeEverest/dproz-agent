@@ -12,6 +12,7 @@ const defaults = (): Settings => ({
 	sweepIntervalHours: 6,
 	model: "",
 	onboarded: false,
+	shareUsage: true,
 });
 
 let cached: Settings | null = null;

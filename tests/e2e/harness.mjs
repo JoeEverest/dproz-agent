@@ -43,6 +43,8 @@ export async function launchApp(sandbox, env = {}, appRoot = root) {
 			DPROZ_AGENT_NO_TRAY: "1",
 			DPROZ_AGENT_QUIET_WINDOW: "1",
 			DPROZ_AGENT_UPDATE_URL: "",
+			// No key, so a test never reports usage. A test of the analytics names its own key and host.
+			DPROZ_AGENT_POSTHOG_KEY: "",
 			// Nothing listens here, so a test can never send a key to the real API by accident.
 			DPROZ_AGENT_ANTHROPIC_URL: "http://127.0.0.1:9",
 			...env,

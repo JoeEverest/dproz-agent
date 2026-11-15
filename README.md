@@ -23,7 +23,7 @@ npm install
 npm run dev
 ```
 
-The key is read from `.env` when the app is built and is not in the repository. Release builds take it from the `DPROZ_API_KEY` repository secret.
+The key is read from `.env` when the app is built and is not in the repository. Release builds take it from the `DPROZ_API_KEY` repository secret. `DPROZ_AGENT_POSTHOG_KEY` works the same way and is optional: see Usage analytics.
 
 First launch is a setup screen: add your documents, and it checks the Claude sign-in and downloads the agent's own Chromium (about 170 MB, once). Press Start and it is on its own from there.
 
@@ -37,7 +37,7 @@ The main screen is the board. Nothing has to be asked for:
 - When it needs something only you know, the question appears on the Questions screen, as a chat. A requirement a job asks for that nothing you have given it shows is a quick question: **I have it** or **Not yet**, one click, as in Dproz Fit Check. One click is the whole answer: it never asks you to explain. Anything else it asks is something an application cannot go ahead without, such as the salary a form requires. It does not ask about your experience. Each answer is worked into your master resume as a fact, where it belongs: a licence under Certifications and licences, something you do not have under Do not have. So it is asked once, and the same requirement on another job is answered for you.
 - A resume for one job is a selection from the master resume, not a copy of it. The agent picks what that employer cares about and leaves the rest out: a desk job does not hear about a commercial driving licence, and an answer you gave for one job is not put on every resume.
 - Each card lists the documents written for that job; clicking one slides a preview out beside the card, with a Download button that saves a copy.
-- **Add a job** takes a link or pasted posting for a job you found yourself, to apply to or only prepare.
+- **Add a job** takes jobs you found yourself: one link, several links pasted one per line, or the text of a posting. Each becomes a card, even when the fit is not obvious, since you chose it. **Apply for me** takes it through prepare, judge and send; **Prepare only** stops at Ready to submit. A job that only takes applications by email cannot be sent from here: the resume, the cover letter and the email are prepared, and the card waits under Apply manually for you to send.
 - Pause stops the current run and holds everything until you resume.
 
 ### How resumes are written
@@ -98,6 +98,35 @@ inbox.json               general questions the agent has asked you
 - **The agent's browser** (Settings → Site logins → Open browser): the agent drives its own Chromium and keeps its profile between runs. This button opens that same browser for you, so you can sign in to your email and job sites once by hand. The agent starts nothing while it is open and finds itself signed in afterwards. With your webmail signed in there, it also picks up the verification codes and confirmation links that sites email you, instead of asking you for them.
 - **Settings** (gear, bottom of the sidebar): send automatically (on by default; off means every application waits at Ready to submit and the browser can read but not click, type or upload), how often it searches, site logins, the model, and the installed version. Logins are encrypted with the system keychain (Keychain on macOS, the Secret Service on Linux); on a Linux machine with no keyring the page says so.
 
+### Usage analytics
+
+The app reports anonymous usage figures to PostHog (`src/main/analytics.ts`), to show which models people use and what they spend, how far applications get and where they stop, and what an application costs by how it is sent. **Settings → About → Share anonymous usage figures** turns it off. Only an installed build reports: a development run, a test, and a build made without `DPROZ_AGENT_POSTHOG_KEY` send nothing.
+
+What is sent: counts, timings, token counts, estimated costs, model names, card statuses, the hostname of the website an application goes through, and the app version and platform. PostHog also records an approximate location from the connection. What is never sent: your name or contact details, your documents or master resume, your answers, or the title or employer of any job. An install is a random id, a card is a hash, no person profile is built, and error messages have the home folder and any email address taken out.
+
+| Event | When | What it carries |
+| --- | --- | --- |
+| `app opened` | The app starts | Version, platform, how the agent reaches a model, the model chosen, how many cards are at each stage |
+| `setup completed` | Setup is finished | |
+| `job added` | **Add a job** is used | How many links, or pasted text; apply or prepare only |
+| `run finished` | Each agent run ends | Kind (`sweep`, `onboard`, `answers`, `add_job`, `submit`, …), outcome, duration, cost, tokens, models, the error if it failed |
+| `model used` | Once per model in a run | Model, cost and tokens, so spending can be broken down by model |
+| `application step` | A subagent finishes | `write`, `judge` or `send`; how it ended (`READY`, `NEEDS_INPUT`, `MANUAL`, `CLOSED`, `BLOCKED`, `SEND`, `REVISE`, `APPLIED`, `ERROR`, `INTERRUPTED`); duration; its share of the run's cost |
+| `application found`, `needs input`, `ready`, `manual`, `applied`, `interview`, `closed` | A card changes status | The status it left, whether the agent or you moved it, how it is sent, the site, the fit verdict, minutes since it was found, and for a closed card the kind of reason |
+| `application completed` | A card reaches Applied or Apply manually | Total cost across every run that worked on it, steps, revisions, questions asked, how it is sent |
+| `question asked`, `question answered` | The agent asks, you answer | Quick or typed, the kind of requirement, I have it or Not yet, minutes to answer |
+| `browser help requested` | The agent hands you the browser | Kind (`captcha`, `code`, `sign_in`), whether you did it, how long it waited |
+
+The SDK reports one cost for a whole run. Each step's share is worked out from the tokens its own messages used (`src/main/agent/meter.ts`), so per-application costs are estimates that add up to the run's total, less what the coordinator itself used.
+
+Questions these answer in PostHog:
+
+- **Models and spending**: sum of `cost_usd` on `model used`, broken down by `used_model`; sum of `cost_usd` on `run finished` per install per week.
+- **The funnel**: `application found` → `application ready` or `application manual` → `application applied`, broken down by `apply_method` or `apply_host`.
+- **Where it fails or sticks**: `application step` broken down by `step` and `outcome`; `run finished` where `outcome` is not `success`, by `error`; `application needs input` with no later status; `browser help requested` by `kind` and `outcome`.
+- **Jobs applied to per person**: count of `application applied` where `by` is `agent`, per install.
+- **Cost per application by method**: average `cost_usd` on `application completed`, broken down by `apply_method`.
+
 ### Updates
 
 The app asks the download site for the latest release when it starts and every 4 hours (`src/main/updates.ts`). When a newer version is out, an update icon appears at the bottom of the sidebar and on the Settings page. Pressing it downloads the new version inside the app, checks it against the SHA-256 GitHub records for the release file, and then offers **Restart to update**, which closes the app, puts the new version in place and opens it again.
@@ -124,13 +153,14 @@ node tests/e2e/run.mjs platform       # setup, board, questions, drawer, master 
 node tests/e2e/run.mjs gallery        # screenshots of every screen, light and dark, with demo cards
 node tests/e2e/run.mjs full           # the whole autonomous flow against a local mock jobs feed and careers portal
 node tests/e2e/run.mjs edits          # you edit your master resume, and the agent prepares again the unsent application that relied on it
+node tests/e2e/run.mjs addjob         # you paste two job links: one is applied for, one is prepared for email; checks what is reported as usage
 node tests/e2e/run.mjs links          # the agent reads a linked page into about-me.md, against a local page
 node tests/e2e/run.mjs browser        # you sign in through the agent's browser, then its next run is signed in (opens a Chromium window)
 npm run pack && node tests/e2e/run.mjs packaged   # the packaged app, including a prepare-only agent run
 ./tests/e2e/linux.sh                  # builds and runs the platform test on Linux in Docker
 ```
 
-`full`, `links`, `browser` and `packaged` use your Claude account. They set `DPROZ_AGENT_TEST_ORIGIN` and point `DPROZ_API_URL` at the mock, which restricts the agent's browser to the mock portal and removes the web tools, so a test with a fictional candidate cannot reach a real employer. Test sandboxes also start paused unless a test turns that off. Keep both in place for any test that lets the agent run.
+`full`, `edits`, `addjob`, `links`, `browser` and `packaged` use your Claude account. They set `DPROZ_AGENT_TEST_ORIGIN` and point `DPROZ_API_URL` at the mock, which restricts the agent's browser to the mock portal and removes the web tools, so a test with a fictional candidate cannot reach a real employer. Test sandboxes also start paused unless a test turns that off. Keep both in place for any test that lets the agent run.
 
 ## Packaging and releases
 
@@ -165,5 +195,7 @@ The app icon is rendered from the Dproz logo by `node tools/icon.mjs` into `buil
 | `DPROZ_AGENT_HEADLESS` | Run the agent's browser without a window. Hand-offs need a window, so this is for tests. |
 | `DPROZ_AGENT_TEST_ORIGIN` | Fence the agent to one origin (see Tests). |
 | `DPROZ_API_URL`, `DPROZ_API_KEY`, `DPROZ_SITE_URL` | Point the Dproz tools at another API. |
+| `DPROZ_AGENT_POSTHOG_KEY` | The PostHog project key for usage analytics, read from `.env` at build time or from the environment. Empty sends nothing. Release builds take it from the repository secret of the same name. |
+| `DPROZ_AGENT_POSTHOG_HOST` | Where usage figures are sent. Naming a host also lets a build that is not installed report, which is how the tests see what is sent. |
 | `DPROZ_AGENT_UPDATE_URL` | Where the app checks for a newer release. Empty turns the check off. |
 | `DPROZ_AGENT_ANTHROPIC_URL` | Where an Anthropic API key is checked before it is saved. Tests point it away from the real API. |

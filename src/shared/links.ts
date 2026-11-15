@@ -40,3 +40,13 @@ export function linkParts(link: string): { site: string; page: string } {
 		return { site: link, page: "" };
 	}
 }
+
+/**
+ * The job links in what the user pasted into Add a job, when links are all it is: one per line, or
+ * separated by spaces or commas. A pasted posting is text, even if it has a link in it, so it gives none.
+ */
+export function jobLinks(pasted: string): string[] {
+	const parts = pasted.split(/[\s,]+/).filter(Boolean);
+	const links = parts.map(normaliseLink);
+	return links.every((link): link is string => link !== null) ? [...new Set(links)] : [];
+}

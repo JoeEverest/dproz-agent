@@ -226,6 +226,20 @@ export async function startMockAts({ submissionsFile, port = 0 }) {
 
 		if (route === "GET /jobs/finance-officer" || route === `GET /jobs/${listings[0]._id}`)
 			return send(response, 200, jobPage);
+		// A posting on some other site, which only takes applications by email.
+		if (route === "GET /postings/accountant") {
+			const job = listings[1];
+			return send(
+				response,
+				200,
+				`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${job.jobTitle} at ${job.companyName} · Arusha Jobs Board</title></head>
+<body style="font-family:system-ui,sans-serif;max-width:720px;margin:40px auto;line-height:1.5">
+<h1>${job.jobTitle}</h1><p><strong>${job.companyName}</strong> · Arusha, Tanzania · Full-time</p>
+<p>${job.jobDescription.lookingToHire}</p>
+<h2>What you need</h2><ul>${job.jobDescription.qualifications.map(({ value }) => `<li>${value}</li>`).join("")}</ul>
+<h2>How to apply</h2>${job.applicationProcess}</body></html>`,
+			);
+		}
 		if (route === "GET /api/jobs/categories")
 			return json(response, [
 				{ _id: "Accounting", count: 2 },
