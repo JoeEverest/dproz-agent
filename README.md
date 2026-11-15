@@ -199,3 +199,28 @@ The app icon is rendered from the Dproz logo by `node tools/icon.mjs` into `buil
 | `DPROZ_AGENT_POSTHOG_HOST` | Where usage figures are sent. Naming a host also lets a build that is not installed report, which is how the tests see what is sent. |
 | `DPROZ_AGENT_UPDATE_URL` | Where the app checks for a newer release. Empty turns the check off. |
 | `DPROZ_AGENT_ANTHROPIC_URL` | Where an Anthropic API key is checked before it is saved. Tests point it away from the real API. |
+
+### Development profile
+
+Unpackaged runs (`npm run dev` and `npm start`) use a persistent
+`Dproz Agent Development` profile in the OS application-data directory
+(`~/.config/Dproz Agent Development` on Linux). The installed app keeps its
+existing profile, so both can run at the same time. `DPROZ_AGENT_USER_DATA`
+still takes precedence when explicitly set, including by the test harness.
+Development starts with its own onboarding and retains its data between runs;
+it does not copy installed-app data, create sample questions or reset state.
+
+Unpackaged runs show a Development strip above the interface and identify
+themselves as `Dproz Agent (Development)` in the window title.
+
+Run `node tests/e2e/run.mjs development` after building to check profile
+isolation, persistence and environment labels. It uses isolated fixtures and
+simulates packaged status; it does not launch your installed app.
+
+### Linux development sandbox setup
+
+If `npm run dev` aborts with an incorrectly configured SUID sandbox helper,
+set `DPROZ_AGENT_DEV_NO_SANDBOX=1` in the ignored `.env.development.local` file,
+then run `npm run dev` again. This opts Linux development runs into Electron's
+`--no-sandbox` workaround; it does not repair the system sandbox configuration.
+Without this setting, Electron's sandbox behavior is unchanged.

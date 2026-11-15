@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { app, BrowserWindow, Menu, nativeImage, nativeTheme, shell, Tray } from "electron";
 import { agent } from "./agent/manager";
@@ -16,6 +17,11 @@ if (process.env.DPROZ_AGENT_USER_DATA) {
 	// A test build is signed differently from the installed app, so macOS would stop it with a keychain
 	// prompt. Only a run with its own data folder may swap the keychain for Chromium's stand-in.
 	if (process.env.DPROZ_AGENT_MOCK_KEYCHAIN) app.commandLine.appendSwitch("use-mock-keychain");
+} else if (!app.isPackaged) {
+	// Separate the development profile and single-instance lock from the installed app.
+	const developmentData = path.join(app.getPath("appData"), "Dproz Agent Development");
+	mkdirSync(developmentData, { recursive: true });
+	app.setPath("userData", developmentData);
 }
 registerPreviewScheme();
 
@@ -36,13 +42,14 @@ function createWindow() {
 		minWidth: 1040,
 		minHeight: 680,
 		show: false,
-		title: "Dproz Agent",
+		title: app.isPackaged ? "Dproz Agent" : "Dproz Agent (Development)",
 		titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
 		autoHideMenuBar: true,
 		icon: process.platform === "darwin" ? undefined : appIcon(),
 		trafficLightPosition: { x: 20, y: 18 },
 		backgroundColor: nativeTheme.shouldUseDarkColors ? "#151618" : "#f4f5f6",
 		webPreferences: {
+			additionalArguments: app.isPackaged ? [] : ["--dproz-development"],
 			preload: path.join(import.meta.dirname, "../preload/index.cjs"),
 			sandbox: true,
 			contextIsolation: true,

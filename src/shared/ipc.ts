@@ -140,6 +140,7 @@ export type DeskEvents = {
 };
 
 export type DeskApi = {
+	isDevelopment: boolean;
 	settings: {
 		get(): Promise<Settings>;
 		update(patch: Partial<Settings>): Promise<Settings>;
@@ -226,7 +227,7 @@ export type DeskApi = {
 	on<K extends keyof DeskEvents>(channel: K, listener: (payload: DeskEvents[K]) => void): () => void;
 };
 
-type RemoteAreas = Exclude<keyof DeskApi, "on">;
+type RemoteAreas = Exclude<keyof DeskApi, "on" | "isDevelopment">;
 
 export const DESK_METHODS = {
 	settings: ["get", "update"],

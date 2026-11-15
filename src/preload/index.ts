@@ -8,10 +8,11 @@ const remote = Object.fromEntries(
 			methods.map((method) => [method, (...args: unknown[]) => ipcRenderer.invoke(`${area}:${method}`, ...args)]),
 		),
 	]),
-) as unknown as Omit<DeskApi, "on">;
+) as unknown as Omit<DeskApi, "on" | "isDevelopment">;
 
 const api: DeskApi = {
 	...remote,
+	isDevelopment: process.argv.includes("--dproz-development"),
 	documents: { ...remote.documents, pathForFile: (file) => webUtils.getPathForFile(file) },
 	on(channel, listener) {
 		if (!DESK_EVENTS.includes(channel)) throw new Error(`Unknown event ${channel}`);

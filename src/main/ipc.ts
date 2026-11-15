@@ -39,7 +39,7 @@ type Remote<T> = {
 };
 
 type Handlers = {
-	[Area in Exclude<keyof DeskApi, "on">]: Remote<Omit<DeskApi[Area], "pathForFile">>;
+	[Area in Exclude<keyof DeskApi, "on" | "isDevelopment">]: Remote<Omit<DeskApi[Area], "pathForFile">>;
 };
 
 async function setupStatus(): Promise<SetupStatus> {

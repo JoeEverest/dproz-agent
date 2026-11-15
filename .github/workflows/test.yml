@@ -62,6 +62,14 @@ jobs:
           grep -q "^RESULT" platform.log
           ! grep -q "^FAIL" platform.log
 
+      - name: Development profile isolation
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            DPROZ_AGENT_ELECTRON_ARGS=--no-sandbox xvfb-run -a node tests/e2e/run.mjs development
+          else
+            node tests/e2e/run.mjs development
+          fi
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
