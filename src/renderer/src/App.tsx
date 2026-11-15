@@ -154,7 +154,14 @@ export function App() {
 				{page === "jobs" && (
 					<Board showReadyColumn={!settings.data.autoSubmit} sweepIntervalHours={settings.data.sweepIntervalHours} />
 				)}
-				{page === "questions" && <QuestionsPage history={history} open={questions} onAnswer={answer} />}
+				{page === "questions" && (
+					<QuestionsPage
+						history={history}
+						open={questions}
+						onAnswer={answer}
+						sendShortcut={settings.data.questionSendShortcut}
+					/>
+				)}
 				{page === "profile" && <ProfilePage />}
 				{page === "settings" && <SettingsPage settings={settings.data} onChange={settings.setData} update={update} />}
 			</main>

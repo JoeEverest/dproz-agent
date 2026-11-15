@@ -468,6 +468,21 @@ export function SettingsPage({ settings, onChange, update }: Props & { update: U
 	return (
 		<Page title="Settings">
 			<AgentGroup settings={settings} onChange={onChange} setup={setup} />
+			<Group title="Questions">
+				<Row
+					title="Enter sends answers"
+					note="On: Enter sends and Shift+Enter adds a new line. Off: Ctrl+Enter (Command+Enter on Mac) sends and Enter adds a new line."
+					control={
+						<Toggle
+							label="Enter sends answers"
+							checked={settings.questionSendShortcut === "enter"}
+							onChange={async (enabled) =>
+								onChange(await window.desk.settings.update({ questionSendShortcut: enabled ? "enter" : "mod+enter" }))
+							}
+						/>
+					}
+				/>
+			</Group>
 			<LoginsGroup />
 			<ProviderGroup setup={setup} />
 			<AboutAppGroup settings={settings} onChange={onChange} update={update} />

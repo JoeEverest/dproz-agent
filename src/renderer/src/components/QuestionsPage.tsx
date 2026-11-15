@@ -1,4 +1,5 @@
 import { awaitingChoice, type QuestionReply } from "@shared/application";
+import type { Settings } from "@shared/ipc";
 import { Textarea } from "@ui-sdk/react/textarea";
 import { ArrowUp, Bot, Briefcase, CheckCheck, ChevronLeft, ChevronRight, CornerDownRight } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -105,13 +106,15 @@ function Working({ label }: { label: string }) {
 }
 
 type ComposerProps = {
+	sendShortcut: Settings["questionSendShortcut"];
 	open: OpenQuestion[];
 	target: OpenQuestion | undefined;
 	onPick: (id: string) => void;
 	onAnswer: (question: OpenQuestion, reply: QuestionReply) => Promise<void>;
 };
 
-function Composer({ open, target, onPick, onAnswer }: ComposerProps) {
+function Composer({ open, target, onPick, onAnswer, sendShortcut }: ComposerProps) {
+	const submitting = useRef(false);
 	const [draft, setDraft] = useState("");
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -120,7 +123,8 @@ function Composer({ open, target, onPick, onAnswer }: ComposerProps) {
 	const choosing = Boolean(target && awaitingChoice(target));
 
 	const send = async (reply: QuestionReply) => {
-		if (!target) return;
+		if (!target || submitting.current) return;
+		submitting.current = true;
 		setSaving(true);
 		setError(null);
 		try {
@@ -129,13 +133,14 @@ function Composer({ open, target, onPick, onAnswer }: ComposerProps) {
 		} catch (cause) {
 			setError(`That did not send: ${(cause as Error).message}`);
 		} finally {
+			submitting.current = false;
 			setSaving(false);
 		}
 	};
 
 	const submit = (event: FormEvent) => {
 		event.preventDefault();
-		if (draft.trim()) void send(draft.trim());
+		if (!choosing && draft.trim()) void send(draft.trim());
 	};
 
 	const step = (by: number) => {
@@ -182,7 +187,16 @@ function Composer({ open, target, onPick, onAnswer }: ComposerProps) {
 							disabled={!target}
 							value={draft}
 							onValueChange={(value) => setDraft(value)}
-							submitShortcut="mod+enter"
+							submitShortcut={sendShortcut}
+							onKeyDownCapture={(event) => {
+								if (
+									event.key === "Enter" &&
+									(event.repeat || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)
+								) {
+									event.stopPropagation();
+									if (event.repeat) event.preventDefault();
+								}
+							}}
 							placeholder={target ? "Your answer" : "Nothing to answer right now"}
 							aria-label={target ? promptOf(target) : "Your answer"}
 							style={{ outline: "none" }}
@@ -190,7 +204,12 @@ function Composer({ open, target, onPick, onAnswer }: ComposerProps) {
 						/>
 						<div className="flex items-center justify-between gap-3 pt-1 pr-2 pb-2 pl-3.5">
 							<span className={`text-xs ${error ? "text-danger" : "text-ink-3"}`} role={error ? "alert" : undefined}>
-								{error ?? (target ? `${sendKey} to send` : "The agent will ask here when it needs you")}
+								{error ??
+									(target
+										? sendShortcut === "enter"
+											? "Enter to send · Shift Enter for a new line"
+											: `${sendKey} to send`
+										: "The agent will ask here when it needs you")}
 							</span>
 							<span className="flex shrink-0 items-center gap-2">
 								<button
@@ -211,12 +230,13 @@ function Composer({ open, target, onPick, onAnswer }: ComposerProps) {
 }
 
 type Props = {
+	sendShortcut: Settings["questionSendShortcut"];
 	history: OpenQuestion[];
 	open: OpenQuestion[];
 	onAnswer: (question: OpenQuestion, reply: QuestionReply) => Promise<void>;
 };
 
-export function QuestionsPage({ history, open: waiting, onAnswer }: Props) {
+export function QuestionsPage({ history, open: waiting, onAnswer, sendShortcut }: Props) {
 	const agent = useAgentState();
 	const [targetId, setTargetId] = useState<string | null>(null);
 	const scroller = useRef<HTMLDivElement>(null);
@@ -276,7 +296,7 @@ export function QuestionsPage({ history, open: waiting, onAnswer }: Props) {
 				)}
 			</div>
 
-			<Composer open={open} target={target} onPick={setTargetId} onAnswer={answer} />
+			<Composer sendShortcut={sendShortcut} open={open} target={target} onPick={setTargetId} onAnswer={answer} />
 		</section>
 	);
 }

@@ -1,6 +1,7 @@
 import type { Application, ApplicationStatus, Question, QuestionReply } from "./application";
 
 export type Settings = {
+	questionSendShortcut: "mod+enter" | "enter";
 	workspaceDir: string;
 	autoSubmit: boolean;
 	paused: boolean;

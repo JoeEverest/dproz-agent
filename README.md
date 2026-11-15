@@ -94,6 +94,8 @@ inbox.json               general questions the agent has asked you
 
 ### Profile settings and Settings
 
+In Settings → Questions, **Enter sends answers** switches typed replies to Enter to send and Shift+Enter for a new line. It is off by default: Ctrl+Enter (Command+Enter on macOS) sends, and Enter adds a new line. Your choice is remembered across restarts.
+
 - **Profile settings** (sidebar): your master resume as a page you edit in place, with your documents and links in a bar beside it. Click a document to preview it. Correct or add anything on the page and save: what is written there is the truth about you from then on. The agent then checks the applications it has not sent yet and prepares again any that relied on what you changed, and tells you if one already sent claimed it. If the agent added to the page while you were editing, you choose which version to keep.
 - **The agent's browser** (Settings → Site logins → Open browser): the agent drives its own Chromium and keeps its profile between runs. This button opens that same browser for you, so you can sign in to your email and job sites once by hand. The agent starts nothing while it is open and finds itself signed in afterwards. With your webmail signed in there, it also picks up the verification codes and confirmation links that sites email you, instead of asking you for them.
 - **Settings** (gear, bottom of the sidebar): send automatically (on by default; off means every application waits at Ready to submit and the browser can read but not click, type or upload), how often it searches, site logins, the model, and the installed version. Logins are encrypted with the system keychain (Keychain on macOS, the Secret Service on Linux); on a Linux machine with no keyring the page says so.
@@ -150,6 +152,7 @@ npm run lint
 npm test                              # unit tests
 npm run build
 node tests/e2e/run.mjs platform       # setup, board, questions, drawer, master resume editor, settings, vault (no agent run)
+node tests/e2e/run.mjs shortcuts      # question reply shortcuts, restart persistence and accidental-send guards (no agent run)
 node tests/e2e/run.mjs gallery        # screenshots of every screen, light and dark, with demo cards
 node tests/e2e/run.mjs full           # the whole autonomous flow against a local mock jobs feed and careers portal
 node tests/e2e/run.mjs edits          # you edit your master resume, and the agent prepares again the unsent application that relied on it
