@@ -31,6 +31,8 @@ const percent = (update: UpdateInfo | null) => Math.round((update?.progress ?? 0
 
 /** The sentence under the version number in Settings. */
 export function updateNote(update: UpdateInfo): string | undefined {
+	if (update.openingDownload) return "Checking the latest release before downloading.";
+	if (update.error) return `The latest update could not be checked or opened. ${update.error}`;
 	if (!update.available) return undefined;
 	const version = `Version ${update.latest}`;
 	if (update.stage === "failed") {
@@ -43,11 +45,20 @@ export function updateNote(update: UpdateInfo): string | undefined {
 
 function useUpdateAction(update: UpdateInfo | null) {
 	const [asking, setAsking] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 	const step = stepOf(update);
 	const restart = () => void window.desk.updates.install();
 
 	const act = async () => {
-		if (step === "link" && update?.url) void window.desk.shell.openExternal(update.url);
+		if (update?.openingDownload) return;
+		if (step === "link") {
+			try {
+				const latest = await window.desk.updates.openDownload();
+				if (latest.error) setError(latest.error);
+			} catch (cause) {
+				setError((cause as Error).message);
+			}
+		}
 		if (step === "download") void window.desk.updates.download();
 		if (step === "restart") {
 			// A restart stops whatever the agent is in the middle of, so it asks first.
@@ -58,28 +69,48 @@ function useUpdateAction(update: UpdateInfo | null) {
 	};
 
 	const question = (
-		<AlertDialog
-			open={asking}
-			onOpenChange={(open, details) => {
-				if (open) return;
-				setAsking(false);
-				if (details.returnValue === "confirm") restart();
-			}}
-		>
-			<AlertDialogBackdrop className="fixed inset-0 bg-scrim transition-[opacity] duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0" />
-			<AlertDialogContent className="app fixed inset-0 m-auto h-fit w-[360px] max-w-[calc(100vw-48px)] rounded-xl bg-surface p-4 text-ink shadow-pop transition-[opacity,scale] duration-200 ease-(--ease-out) data-ending-style:scale-96 data-ending-style:opacity-0 data-starting-style:scale-96 data-starting-style:opacity-0 motion-reduce:transition-[opacity]">
-				<AlertDialogTitle className="text-sm font-semibold">Restart while the agent is working?</AlertDialogTitle>
-				<AlertDialogDescription className="mt-1 text-ink-2">
-					Restarting stops what it is doing now. It picks the work up again after the update.
-				</AlertDialogDescription>
-				<div className="mt-4 flex justify-end gap-2">
-					<AlertDialogClose className={buttonClass("secondary", "sm")}>Not now</AlertDialogClose>
-					<AlertDialogClose value="confirm" className={buttonClass("primary", "sm")}>
-						Restart anyway
-					</AlertDialogClose>
-				</div>
-			</AlertDialogContent>
-		</AlertDialog>
+		<>
+			<AlertDialog
+				open={asking}
+				onOpenChange={(open, details) => {
+					if (open) return;
+					setAsking(false);
+					if (details.returnValue === "confirm") restart();
+				}}
+			>
+				<AlertDialogBackdrop className="fixed inset-0 bg-scrim transition-[opacity] duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0" />
+				<AlertDialogContent className="app fixed inset-0 m-auto h-fit w-[360px] max-w-[calc(100vw-48px)] rounded-xl bg-surface p-4 text-ink shadow-pop transition-[opacity,scale] duration-200 ease-(--ease-out) data-ending-style:scale-96 data-ending-style:opacity-0 data-starting-style:scale-96 data-starting-style:opacity-0 motion-reduce:transition-[opacity]">
+					<AlertDialogTitle className="text-sm font-semibold">Restart while the agent is working?</AlertDialogTitle>
+					<AlertDialogDescription className="mt-1 text-ink-2">
+						Restarting stops what it is doing now. It picks the work up again after the update.
+					</AlertDialogDescription>
+					<div className="mt-4 flex justify-end gap-2">
+						<AlertDialogClose className={buttonClass("secondary", "sm")}>Not now</AlertDialogClose>
+						<AlertDialogClose value="confirm" className={buttonClass("primary", "sm")}>
+							Restart anyway
+						</AlertDialogClose>
+					</div>
+				</AlertDialogContent>
+			</AlertDialog>
+			<AlertDialog
+				open={Boolean(error)}
+				onOpenChange={(open) => {
+					if (!open) setError(null);
+				}}
+			>
+				<AlertDialogBackdrop className="fixed inset-0 bg-scrim" />
+				<AlertDialogContent className="app fixed inset-0 m-auto h-fit w-[360px] max-w-[calc(100vw-48px)] rounded-xl bg-surface p-4 text-ink shadow-pop">
+					<AlertDialogTitle className="text-sm font-semibold">Could not open the latest download</AlertDialogTitle>
+					<AlertDialogDescription className="mt-1 text-ink-2">
+						<span className="block">{error}</span>
+						<span className="mt-2 block">No installer was opened. Try Download again.</span>
+					</AlertDialogDescription>
+					<div className="mt-4 flex justify-end">
+						<AlertDialogClose className={buttonClass("secondary", "sm")}>Close</AlertDialogClose>
+					</div>
+				</AlertDialogContent>
+			</AlertDialog>
+		</>
 	);
 
 	return { step, act, question };
@@ -108,12 +139,14 @@ export function UpdateIcon({ update }: { update: UpdateInfo | null }) {
 	const { step, act, question } = useUpdateAction(update);
 	if (step === "none" || !update) return null;
 	const version = `Version ${update.latest}`;
-	const label = {
-		link: `${version} is available. Download it`,
-		download: `${version} is available. Update now`,
-		downloading: `Downloading ${version.toLowerCase()}, ${percent(update)}%`,
-		restart: `${version} is ready. Restart to update`,
-	}[step];
+	const label = update.openingDownload
+		? "Checking the latest release"
+		: {
+				link: `${version} is available. Download it`,
+				download: `${version} is available. Update now`,
+				downloading: `Downloading ${version.toLowerCase()}, ${percent(update)}%`,
+				restart: `${version} is ready. Restart to update`,
+			}[step];
 	const look =
 		step === "restart"
 			? "bg-solid text-on-solid hover:bg-solid-hover hover:text-on-solid"
@@ -123,7 +156,8 @@ export function UpdateIcon({ update }: { update: UpdateInfo | null }) {
 		<>
 			<IconButton
 				label={label}
-				aria-disabled={step === "downloading" || undefined}
+				disabled={update.openingDownload || step === "downloading"}
+				aria-disabled={update.openingDownload || step === "downloading" || undefined}
 				className={`relative ${look}`}
 				onClick={() => void act()}
 			>
@@ -160,6 +194,7 @@ export function UpdateButton({ update }: { update: UpdateInfo | null }) {
 			<Button
 				size="sm"
 				tone="primary"
+				disabled={update.openingDownload}
 				icon={
 					restart ? (
 						<RotateCw size={13} strokeWidth={2} aria-hidden />
@@ -169,7 +204,13 @@ export function UpdateButton({ update }: { update: UpdateInfo | null }) {
 				}
 				onClick={() => void act()}
 			>
-				{restart ? "Restart to update" : step === "link" ? `Download ${update.latest}` : `Update to ${update.latest}`}
+				{update.openingDownload
+					? "Checking latest release"
+					: restart
+						? "Restart to update"
+						: step === "link"
+							? `Download ${update.latest}`
+							: `Update to ${update.latest}`}
 			</Button>
 			{question}
 		</>

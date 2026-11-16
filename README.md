@@ -140,6 +140,11 @@ The builds are not signed with an Apple Developer ID, and the standard macOS upd
 | Windows | Downloads the installer and runs it silently. |
 | Linux `.deb`, an app opened from the disk image, a development run | Cannot replace itself: the button opens the installer download instead. |
 
+Before opening an installer in the browser, Download checks the latest release
+again and uses that release's installer for your platform. If the check fails or
+the installer is missing, it shows an error so you can retry; it does not open
+the older download link.
+
 Nothing is downloaded until the button is pressed. `node tests/e2e/run.mjs update` runs a real update of a packaged macOS copy inside a sandbox (the two builds it needs are named at the top of `tests/e2e/update.mjs`).
 
 ## Tests
@@ -150,6 +155,7 @@ npm run lint
 npm test                              # unit tests
 npm run build
 node tests/e2e/run.mjs platform       # setup, board, questions, drawer, master resume editor, settings, vault (no agent run)
+node tests/e2e/run.mjs update-download # fresh installer links, busy controls, failures and retry (no agent run)
 node tests/e2e/run.mjs gallery        # screenshots of every screen, light and dark, with demo cards
 node tests/e2e/run.mjs full           # the whole autonomous flow against a local mock jobs feed and careers portal
 node tests/e2e/run.mjs edits          # you edit your master resume, and the agent prepares again the unsent application that relied on it

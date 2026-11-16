@@ -23,7 +23,7 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { UpdateInfo } from "@shared/ipc";
 import { isNewer } from "@shared/version";
-import { app } from "electron";
+import { app, shell } from "electron";
 import { broadcast } from "./events";
 
 /** The download site: it answers with the latest release and where to get it. Empty turns checks off. */
@@ -54,6 +54,7 @@ let info: UpdateInfo = { current: app.getVersion(), available: false, inPlace: f
 let wanted: { version: string; pack: Package } | undefined;
 /** The checked download, ready to put in place (macOS: the unpacked .app). */
 let staged: { version: string; path: string } | undefined;
+let checking: Promise<UpdateInfo> | undefined;
 
 function set(patch: Partial<UpdateInfo>) {
 	info = { ...info, ...patch };
@@ -100,12 +101,24 @@ function siteKeys() {
 
 export const updateStatus = () => info;
 
-export async function checkForUpdate(): Promise<UpdateInfo> {
-	if (!UPDATE_URL || info.stage === "downloading") return info;
+export function checkForUpdate(fresh = false): Promise<UpdateInfo> {
+	if (!UPDATE_URL || info.stage === "downloading") return Promise.resolve(info);
+	checking ??= refreshUpdate(fresh).finally(() => {
+		checking = undefined;
+	});
+	return checking;
+}
+
+async function refreshUpdate(fresh: boolean): Promise<UpdateInfo> {
 	try {
-		const response = await fetch(UPDATE_URL, { signal: AbortSignal.timeout(15_000) });
+		const response = await fetch(UPDATE_URL, {
+			signal: AbortSignal.timeout(15_000),
+			cache: fresh ? "no-store" : "default",
+		});
 		if (!response.ok) throw new Error(`The update server answered ${response.status}`);
 		const latest = (await response.json()) as Latest;
+		if (typeof latest.version !== "string" || !latest.version.trim())
+			throw new Error("The update server did not return a release version.");
 		const keys = siteKeys();
 		const available = Boolean(latest.version && isNewer(latest.version, info.current));
 		const pack = place.kind && !place.blocked ? latest.updates?.[keys.pack] : undefined;
@@ -116,7 +129,7 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
 		set({
 			latest: latest.version,
 			available,
-			url: latest.downloads?.[keys.download] ?? latest.page,
+			url: latest.downloads?.[keys.download],
 			checkedAt: new Date().toISOString(),
 			error: undefined,
 			inPlace: Boolean(wanted),
@@ -127,6 +140,31 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
 		});
 	} catch (cause) {
 		set({ checkedAt: new Date().toISOString(), error: (cause as Error).message });
+	}
+	return info;
+}
+
+/** Refresh before opening an installer; never fall back to an earlier offer after a failed check. */
+export async function openUpdateDownload(): Promise<UpdateInfo> {
+	if (info.openingDownload || info.stage === "downloading" || info.stage === "ready") return info;
+	set({ openingDownload: true });
+	try {
+		if (!UPDATE_URL) throw new Error("Update checks are disabled.");
+		// A poll already in flight may describe an older release. Finish it before requesting a fresh offer.
+		if (checking) await checking;
+		const latest = await checkForUpdate(true);
+		if (!latest.error && latest.available) {
+			if (!latest.url)
+				throw new Error("The latest release has no installer for this platform. Please try again later.");
+			const protocol = new URL(latest.url).protocol;
+			if (protocol !== "https:" && protocol !== "http:")
+				throw new Error("The latest release has an invalid installer URL.");
+			await shell.openExternal(latest.url);
+		}
+	} catch (cause) {
+		set({ error: (cause as Error).message });
+	} finally {
+		set({ openingDownload: false });
 	}
 	return info;
 }

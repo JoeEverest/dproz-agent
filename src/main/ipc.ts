@@ -30,7 +30,7 @@ import { currentHelpRequest, respondToHelp } from "./help";
 import { addLink, listLinks, removeLink } from "./links";
 import { installBrowser, isBrowserInstalled } from "./runtime";
 import { getSettings, updateSettings } from "./settings";
-import { checkForUpdate, downloadUpdate, installUpdate, updateStatus } from "./updates";
+import { checkForUpdate, downloadUpdate, installUpdate, openUpdateDownload, updateStatus } from "./updates";
 import { closeUserBrowser, openUserBrowser } from "./userBrowser";
 import { addDocuments, listDocuments, readAboutMe, removeDocument, workspacePaths, writeAboutMe } from "./workspace";
 
@@ -179,7 +179,13 @@ const handlers: Handlers = {
 		open: (url) => openUserBrowser((typeof url === "string" && normaliseLink(url)) || undefined),
 		close: async () => closeUserBrowser(),
 	},
-	updates: { status: updateStatus, check: checkForUpdate, download: downloadUpdate, install: installUpdate },
+	updates: {
+		status: updateStatus,
+		check: checkForUpdate,
+		openDownload: openUpdateDownload,
+		download: downloadUpdate,
+		install: installUpdate,
+	},
 	shell: {
 		openExternal: async (url) => {
 			if (/^(https?|mailto):/i.test(url)) await shell.openExternal(url);

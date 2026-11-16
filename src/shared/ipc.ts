@@ -116,6 +116,8 @@ export type UpdateInfo = {
 	url?: string;
 	checkedAt?: string;
 	error?: string;
+	/** A fresh installer lookup/open is in progress; shared across download controls. */
+	openingDownload?: boolean;
 	/** Whether this copy can download the new version itself and install it on restart. */
 	inPlace: boolean;
 	/** Why it cannot, when that is something the user can fix. */
@@ -216,6 +218,7 @@ export type DeskApi = {
 	updates: {
 		status(): Promise<UpdateInfo>;
 		check(): Promise<UpdateInfo>;
+		openDownload(): Promise<UpdateInfo>;
 		download(): Promise<UpdateInfo>;
 		install(): Promise<UpdateInfo>;
 	};
@@ -250,7 +253,7 @@ export const DESK_METHODS = {
 	help: ["current", "respond"],
 	claude: ["setApiKey", "setEndpoint", "endpointModels", "setEndpointModel", "clearConnection"],
 	browser: ["open", "close"],
-	updates: ["status", "check", "download", "install"],
+	updates: ["status", "check", "openDownload", "download", "install"],
 	shell: ["openExternal", "open"],
 } as const satisfies { [Area in RemoteAreas]: readonly (keyof DeskApi[Area])[] };
 
