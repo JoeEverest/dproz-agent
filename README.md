@@ -32,6 +32,7 @@ First launch is a setup screen: add your documents, and it checks the Claude sig
 The main screen is the board. Nothing has to be asked for:
 
 - After setup the agent reads your documents and writes your master resume, `about-me.md`: everything about you in one Markdown document. Every job with all you did there and what came of it, your education, certifications, skills, achievements and referees, and the other facts that matter to some jobs and not others. It is not a resume to send. It is the record each resume is cut from, and the source of truth about you.
+- In Profile settings, file selection, dropping files or links, and link entry sit together above the scrolling document list. The file picker remembers the last successful local upload folder across restarts, using Documents and then Home if that folder is unavailable.
 - A source can also be a link, pasted where documents are added. A link to a file (a resume PDF, a Google Doc or Drive file shared with anyone who has the link) is downloaded and becomes a document. A link to a page (a portfolio, a profile) is kept as a link, and the agent reads the page itself, in its browser when the page needs a sign-in.
 - It then searches Dproz on a timer (every 6 hours by default; 4 hours, twice a day and daily are the other choices), looking at jobs posted since the last search. There is no cap: every real fit is pursued.
 - When it needs something only you know, the question appears on the Questions screen, as a chat. A requirement a job asks for that nothing you have given it shows is a quick question: **I have it** or **Not yet**, one click, as in Dproz Fit Check. One click is the whole answer: it never asks you to explain. Anything else it asks is something an application cannot go ahead without, such as the salary a form requires. It does not ask about your experience. Each answer is worked into your master resume as a fact, where it belongs: a licence under Certifications and licences, something you do not have under Do not have. So it is asked once, and the same requirement on another job is answered for you.
@@ -150,6 +151,7 @@ npm run lint
 npm test                              # unit tests
 npm run build
 node tests/e2e/run.mjs platform       # setup, board, questions, drawer, master resume editor, settings, vault (no agent run)
+node tests/e2e/run.mjs profile-input  # document inputs, file drops, remembered folder and fallbacks (no agent run)
 node tests/e2e/run.mjs gallery        # screenshots of every screen, light and dark, with demo cards
 node tests/e2e/run.mjs full           # the whole autonomous flow against a local mock jobs feed and careers portal
 node tests/e2e/run.mjs edits          # you edit your master resume, and the agent prepares again the unsent application that relied on it

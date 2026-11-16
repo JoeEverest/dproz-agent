@@ -1,7 +1,7 @@
 import type { LinkAdded, WorkspaceDocument } from "@shared/ipc";
 import { linkParts, normaliseLink } from "@shared/links";
 import { FilePlus2, FileText, Link2, X } from "lucide-react";
-import { type DragEvent, type FormEvent, useState } from "react";
+import { type DragEvent, type FormEvent, useRef, useState } from "react";
 import { fileSize } from "../lib/format";
 import { useResource } from "../lib/hooks";
 import { Button, IconButton, Input } from "./ui";
@@ -17,18 +17,32 @@ export function droppedLink(event: DragEvent): string | null {
 }
 
 /** Paste a link to a page or a file. A file is downloaded as a document; a page is kept as a link. */
-export function LinkField({ onAdded }: { onAdded: (result: LinkAdded) => void }) {
+export function LinkField({
+	onAdded,
+	compact = false,
+	disabled = false,
+	onBusyChange,
+}: {
+	onAdded: (result: LinkAdded) => void;
+	compact?: boolean;
+	disabled?: boolean;
+	onBusyChange?: (busy: boolean) => void;
+}) {
 	const [value, setValue] = useState("");
+	const submitting = useRef(false);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
 	const submit = async (event: FormEvent) => {
 		event.preventDefault();
+		if (submitting.current || disabled) return;
 		if (!normaliseLink(value)) {
 			setError("That does not look like a web link.");
 			return;
 		}
+		submitting.current = true;
 		setBusy(true);
+		onBusyChange?.(true);
 		setError(null);
 		try {
 			onAdded(await window.desk.documents.addLink(value));
@@ -36,27 +50,34 @@ export function LinkField({ onAdded }: { onAdded: (result: LinkAdded) => void })
 		} catch {
 			setError("The link was not added. Try again.");
 		} finally {
+			submitting.current = false;
 			setBusy(false);
+			onBusyChange?.(false);
 		}
 	};
 
 	return (
 		<form onSubmit={(event) => void submit(event)}>
-			<div className="flex gap-2">
+			<div className={`flex gap-2 ${compact ? "flex-col items-start" : ""}`}>
 				<Input
 					aria-label="Link to a page or file about you"
+					disabled={busy || disabled}
 					value={value}
 					onValueChange={(next) => {
 						setValue(next);
 						setError(null);
 					}}
-					placeholder="Or paste a link: a portfolio, a profile, a resume kept online"
+					placeholder={
+						compact
+							? "Paste a portfolio or document link"
+							: "Or paste a link: a portfolio, a profile, a resume kept online"
+					}
 					autoComplete="off"
 					spellCheck={false}
 				/>
 				<Button
 					type="submit"
-					disabled={busy || !value.trim()}
+					disabled={busy || disabled || !value.trim()}
 					icon={<Link2 size={14} strokeWidth={1.75} aria-hidden />}
 				>
 					{busy ? "Adding" : "Add link"}

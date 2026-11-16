@@ -4,7 +4,7 @@ import type { ProfileSaved, WorkspaceDocument } from "@shared/ipc";
 import aboutMeTemplate from "../../resources/templates/about-me.md?raw";
 import coverLetterTemplate from "../../resources/templates/cover-letter.html?raw";
 import { exists, isInside } from "./files";
-import { getSettings } from "./settings";
+import { getSettings, updateSettings } from "./settings";
 
 export type WorkspacePaths = {
 	root: string;
@@ -64,12 +64,15 @@ export async function freeName(directory: string, name: string) {
 }
 
 export async function addDocuments(sources: string[]): Promise<WorkspaceDocument[]> {
-	const { documents } = await ensureWorkspace();
+	const { root, documents } = await ensureWorkspace();
+	let directory: string | undefined;
 	for (const source of sources) {
 		const stats = await fs.stat(source).catch(() => null);
 		if (!stats?.isFile()) continue;
 		await fs.copyFile(source, path.join(documents, await freeName(documents, path.basename(source))));
+		if (!directory && !isInside(root, path.resolve(source))) directory = path.dirname(path.resolve(source));
 	}
+	if (directory) await updateSettings({ lastDocumentDirectory: directory });
 	return listDocuments();
 }
 

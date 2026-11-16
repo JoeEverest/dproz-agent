@@ -2,6 +2,7 @@ import type { Application, ApplicationStatus, Question, QuestionReply } from "./
 
 export type Settings = {
 	workspaceDir: string;
+	lastDocumentDirectory?: string;
 	autoSubmit: boolean;
 	paused: boolean;
 	sweepIntervalHours: number;

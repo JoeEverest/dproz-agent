@@ -1,7 +1,7 @@
 import type { LinkAdded, WorkspaceDocument } from "@shared/ipc";
 import { linkParts } from "@shared/links";
-import { FileText, Link2, Plus, Trash2, Upload } from "lucide-react";
-import { type CSSProperties, type DragEvent, useState } from "react";
+import { FileText, Link2, Plus, Trash2 } from "lucide-react";
+import { type CSSProperties, type DragEvent, useRef, useState } from "react";
 import { fileSize, relativeTime } from "../lib/format";
 import { useResource } from "../lib/hooks";
 import { DocumentPreview, ownDocument } from "./DocumentPreview";
@@ -14,6 +14,33 @@ function DocumentsBar() {
 	const documents = useResource(() => window.desk.documents.list());
 	const links = useResource(() => window.desk.documents.links());
 	const [over, setOver] = useState(false);
+	const [busy, setBusy] = useState(false);
+	const importing = useRef(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const setImporting = (value: boolean) => {
+		importing.current = value;
+		setBusy(value);
+		if (value) setError(null);
+	};
+
+	const importSources = async (run: () => Promise<void>) => {
+		if (importing.current) return;
+		setImporting(true);
+		setError(null);
+		try {
+			await run();
+		} catch {
+			setError("Some documents could not be added. Check the list, then try again.");
+			// A batch can fail after copying some files; still hand those files to the agent.
+			await window.desk.documents
+				.list()
+				.then(accept)
+				.catch(() => {});
+		} finally {
+			setImporting(false);
+		}
+	};
 	// The file being previewed, and the one whose panel is still sliding away.
 	const [previewing, setPreviewing] = useState<string | null>(null);
 	const [leaving, setLeaving] = useState<string | null>(null);
@@ -46,8 +73,10 @@ function DocumentsBar() {
 		setOver(false);
 		const link = droppedLink(event);
 		const paths = [...event.dataTransfer.files].map((file) => window.desk.documents.pathForFile(file)).filter(Boolean);
-		if (paths.length) accept(await window.desk.documents.add(paths));
-		else if (link) acceptLink(await window.desk.documents.addLink(link));
+		await importSources(async () => {
+			if (paths.length) accept(await window.desk.documents.add(paths));
+			else if (link) acceptLink(await window.desk.documents.addLink(link));
+		});
 	};
 
 	return (
@@ -81,17 +110,53 @@ function DocumentsBar() {
 			<div className="relative z-10 flex min-h-0 flex-1 flex-col bg-canvas">
 				<div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line pr-3 pl-4">
 					<h2 className="text-[13px] font-semibold">Your documents</h2>
-					<Button
-						size="sm"
-						icon={<Plus size={13} strokeWidth={2} aria-hidden />}
-						onClick={async () => accept(await window.desk.documents.pick())}
-					>
-						Add
-					</Button>
 				</div>
 
+				<section aria-label="Add documents" className="max-h-[50%] shrink-0 overflow-y-auto border-b border-line p-3">
+					{/* biome-ignore lint/a11y/noStaticElementInteractions: the file button and link form provide keyboard alternatives */}
+					<div
+						onDragOver={(event) => {
+							event.preventDefault();
+							if (!importing.current) setOver(true);
+						}}
+						onDragLeave={(event) => {
+							if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOver(false);
+						}}
+						onDrop={(event) => void onDrop(event)}
+						className={`space-y-3 rounded-lg border border-dashed p-3 transition-[background-color,border-color] duration-150 ${over ? "border-accent bg-accent-wash" : "border-line-strong"}`}
+					>
+						<div className="flex flex-wrap items-center gap-2">
+							<Button
+								size="sm"
+								icon={<Plus size={13} strokeWidth={2} aria-hidden />}
+								disabled={busy}
+								onClick={() => void importSources(async () => accept(await window.desk.documents.pick()))}
+							>
+								Choose files
+							</Button>
+							<p className="text-xs text-ink-3">or drop files or a link here</p>
+						</div>
+						<LinkField onAdded={acceptLink} compact disabled={busy} onBusyChange={setImporting} />
+					</div>
+					{busy && (
+						<p role="status" className="mt-2 text-xs text-ink-3">
+							Adding documents…
+						</p>
+					)}
+					{error && (
+						<p role="alert" className="mt-2 text-xs text-danger">
+							{error}
+						</p>
+					)}
+				</section>
+
 				<div className="scroll-quiet min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pt-2 pb-4">
-					<ul>
+					{list.length + linkList.length === 0 && (
+						<p className="px-2 py-3 text-xs text-ink-3">
+							No documents yet. Add a resume, certificate or portfolio above.
+						</p>
+					)}
+					<ul aria-label="Saved documents and links">
 						{list.map((document) => {
 							const open = preview === document.name;
 							return (
@@ -153,27 +218,6 @@ function DocumentsBar() {
 						})}
 					</ul>
 
-					{/* biome-ignore lint/a11y/noStaticElementInteractions: drop target; the Add button covers keyboard and pointer use */}
-					<div
-						onDragOver={(event) => {
-							event.preventDefault();
-							setOver(true);
-						}}
-						onDragLeave={() => setOver(false)}
-						onDrop={(event) => void onDrop(event)}
-						className={`mx-1 mt-2 flex flex-col items-center gap-1.5 rounded-lg border border-dashed px-4 py-5 text-center text-ink-3 transition-[background-color,border-color] duration-150 ${
-							over ? "border-accent bg-accent-wash text-accent-ink" : "border-line-strong"
-						}`}
-					>
-						<Upload size={15} strokeWidth={1.75} aria-hidden />
-						<p className="text-xs text-pretty">
-							{list.length + linkList.length === 0 ? "No documents yet. " : ""}Drop a resume, certificate, reference,
-							transcript or old cover letter here.
-						</p>
-					</div>
-					<div className="mx-1 mt-2">
-						<LinkField onAdded={acceptLink} />
-					</div>
 					<p className="mx-2 mt-3 text-xs text-pretty text-ink-3">
 						The agent reads these to write your master resume. Remove one and it stops using it.
 					</p>

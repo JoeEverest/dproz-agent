@@ -53,6 +53,22 @@ async function setupStatus(): Promise<SetupStatus> {
 	};
 }
 
+async function documentPickerDirectory() {
+	const { lastDocumentDirectory } = await getSettings();
+	for (const location of [() => lastDocumentDirectory, () => app.getPath("documents"), () => app.getPath("home")]) {
+		try {
+			const directory = location();
+			if (!directory) continue;
+			if (!(await fs.stat(directory)).isDirectory()) continue;
+			await fs.access(directory, fs.constants.R_OK | fs.constants.X_OK);
+			return directory;
+		} catch {
+			// A moved or inaccessible folder must not prevent opening the picker.
+		}
+	}
+	return undefined;
+}
+
 const handlers: Handlers = {
 	settings: {
 		get: getSettings,
@@ -85,6 +101,7 @@ const handlers: Handlers = {
 		pick: async () => {
 			const result = await dialog.showOpenDialog({
 				title: "Add documents",
+				defaultPath: await documentPickerDirectory(),
 				properties: ["openFile", "multiSelections"],
 			});
 			return result.canceled ? listDocuments() : addDocuments(result.filePaths);
