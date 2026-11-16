@@ -93,7 +93,7 @@
 			"perMachine": false
 		},
 		"linux": {
-			"icon": "build/icon-square.png",
+			"icon": "build/icons",
 			"target": [
 				"AppImage",
 				"deb"
