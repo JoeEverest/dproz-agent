@@ -140,6 +140,8 @@ The builds are not signed with an Apple Developer ID, and the standard macOS upd
 | Windows | Downloads the installer and runs it silently. |
 | Linux `.deb`, an app opened from the disk image, a development run | Cannot replace itself: the button opens the installer download instead. |
 
+The app looks for a release every four hours. The update button looks again when the pointer reaches it and when it is pressed, so what it fetches is the newest release even if one came out in between; if the site cannot be reached it falls back to the release it already knew about.
+
 Nothing is downloaded until the button is pressed. `node tests/e2e/run.mjs update` runs a real update of a packaged macOS copy inside a sandbox (the two builds it needs are named at the top of `tests/e2e/update.mjs`).
 
 ## Tests

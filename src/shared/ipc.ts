@@ -215,7 +215,8 @@ export type DeskApi = {
 	};
 	updates: {
 		status(): Promise<UpdateInfo>;
-		check(): Promise<UpdateInfo>;
+		/** Asks the site again, unless the last answer is younger than `freshFor` milliseconds. */
+		check(freshFor?: number): Promise<UpdateInfo>;
 		download(): Promise<UpdateInfo>;
 		install(): Promise<UpdateInfo>;
 	};

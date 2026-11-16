@@ -8,7 +8,7 @@ import {
 	AlertDialogTitle,
 } from "@ui-sdk/react/alert-dialog";
 import { ArrowDownToLine, RotateCw } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button, buttonClass, IconButton } from "./ui";
 
 /**
@@ -41,19 +41,37 @@ export function updateNote(update: UpdateInfo): string | undefined {
 	return update.blocked ? `${version} is available. ${update.blocked}` : `${version} is available.`;
 }
 
+/** The app looks for a release every few hours. A button brings that up to date unless it is this recent. */
+const FRESH_FOR_MS = 60_000;
+
 function useUpdateAction(update: UpdateInfo | null) {
 	const [asking, setAsking] = useState(false);
+	const acting = useRef(false);
 	const step = stepOf(update);
 	const restart = () => void window.desk.updates.install();
 
+	/** The pointer reaching the button: a press may follow, so the offer is brought up to date first. */
+	const refresh = () => void window.desk.updates.check(FRESH_FOR_MS).catch(() => {});
+
 	const act = async () => {
-		if (step === "link" && update?.url) void window.desk.shell.openExternal(update.url);
-		if (step === "download") void window.desk.updates.download();
 		if (step === "restart") {
 			// A restart stops whatever the agent is in the middle of, so it asks first.
 			const agent = await window.desk.agent.state();
 			if (agent.status === "idle") restart();
 			else setAsking(true);
+			return;
+		}
+		if ((step !== "link" && step !== "download") || acting.current) return;
+		acting.current = true;
+		try {
+			// A release may have come out since the last check, and what is fetched is the newest one.
+			// If the site cannot be reached, this is the offer already on the button.
+			const latest = await window.desk.updates.check(FRESH_FOR_MS).catch(() => update);
+			const now = stepOf(latest);
+			if (now === "link" && latest?.url) void window.desk.shell.openExternal(latest.url);
+			if (now === "download") void window.desk.updates.download();
+		} finally {
+			acting.current = false;
 		}
 	};
 
@@ -82,7 +100,7 @@ function useUpdateAction(update: UpdateInfo | null) {
 		</AlertDialog>
 	);
 
-	return { step, act, question };
+	return { step, act, refresh, question };
 }
 
 function ProgressRing({ value }: { value: number }) {
@@ -105,7 +123,7 @@ function ProgressRing({ value }: { value: number }) {
 
 /** The sidebar's update button. It only exists while a newer version is out. */
 export function UpdateIcon({ update }: { update: UpdateInfo | null }) {
-	const { step, act, question } = useUpdateAction(update);
+	const { step, act, refresh, question } = useUpdateAction(update);
 	if (step === "none" || !update) return null;
 	const version = `Version ${update.latest}`;
 	const label = {
@@ -125,6 +143,7 @@ export function UpdateIcon({ update }: { update: UpdateInfo | null }) {
 				label={label}
 				aria-disabled={step === "downloading" || undefined}
 				className={`relative ${look}`}
+				onPointerEnter={refresh}
 				onClick={() => void act()}
 			>
 				{step === "downloading" && <ProgressRing value={update.progress ?? 0} />}
@@ -143,7 +162,7 @@ export function UpdateIcon({ update }: { update: UpdateInfo | null }) {
 
 /** The same steps as a labelled button, for Settings. Nothing is rendered when there is no newer version. */
 export function UpdateButton({ update }: { update: UpdateInfo | null }) {
-	const { step, act, question } = useUpdateAction(update);
+	const { step, act, refresh, question } = useUpdateAction(update);
 	if (step === "none" || !update) return null;
 	if (step === "downloading") {
 		// A status, not a button: there is nothing to press until the download is in.
@@ -167,6 +186,7 @@ export function UpdateButton({ update }: { update: UpdateInfo | null }) {
 						<ArrowDownToLine size={13} strokeWidth={2} aria-hidden />
 					)
 				}
+				onPointerEnter={refresh}
 				onClick={() => void act()}
 			>
 				{restart ? "Restart to update" : step === "link" ? `Download ${update.latest}` : `Update to ${update.latest}`}

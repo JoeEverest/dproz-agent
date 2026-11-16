@@ -70,8 +70,10 @@ const updates = http.createServer((request, response) => {
 	response.end(
 		JSON.stringify({
 			version: latestVersion,
-			page: "https://example.com/",
-			downloads: { mac: "https://example.com/mac", linux: "https://example.com/linux" },
+			page: `https://example.com/${latestVersion}`,
+			downloads: Object.fromEntries(
+				["mac", "win", "linux", "deb"].map((system) => [system, `https://example.com/${latestVersion}/${system}`]),
+			),
 		}),
 	);
 });
@@ -542,6 +544,34 @@ try {
 		(await window.getByRole("button", { name: "Download 9.9.9" }).count()) === 1,
 	);
 	console.log(await shot(window, `platform-${process.platform}`));
+
+	// A release that comes out after the last check: the button finds it when the pointer reaches it,
+	// and pressing it fetches that release, not the one it was showing.
+	// The button appeared under the pointer, which pressed "Check for updates" in the same place.
+	await window.mouse.move(0, 0);
+	await app.evaluate(({ shell }) => {
+		globalThis.opened = [];
+		shell.openExternal = async (url) => void globalThis.opened.push(url);
+		// Two minutes on, so the answer the app has is no longer recent.
+		globalThis.now = Date.now;
+		Date.now = () => globalThis.now() + 120_000;
+	});
+	latestVersion = "9.9.10";
+	await window.getByRole("button", { name: "Download 9.9.9" }).hover();
+	await window.getByRole("button", { name: "Download 9.9.10" }).waitFor({ timeout: 10_000 });
+	check("hovering the update button finds a release that came out since the last check", true);
+	latestVersion = "9.9.11";
+	await window.getByRole("button", { name: "Download 9.9.10" }).click();
+	await window.getByRole("button", { name: "Download 9.9.11" }).waitFor({ timeout: 10_000 });
+	const system = { darwin: "mac", win32: "win" }[process.platform] ?? "deb";
+	const fetched = await app.evaluate(() => {
+		Date.now = globalThis.now;
+		return globalThis.opened;
+	});
+	check(
+		"pressing it downloads the newest release, not the one it was showing",
+		fetched.length === 1 && fetched[0] === `https://example.com/9.9.11/${system}`,
+	);
 
 	// Usage figures: what is reported, what is not, and the switch that stops it.
 	const event = (name) => reported.find((item) => item.event === name);

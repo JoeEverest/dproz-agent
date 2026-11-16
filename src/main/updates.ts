@@ -100,8 +100,25 @@ function siteKeys() {
 
 export const updateStatus = () => info;
 
-export async function checkForUpdate(): Promise<UpdateInfo> {
-	if (!UPDATE_URL || info.stage === "downloading") return info;
+let checking: Promise<UpdateInfo> | undefined;
+
+/**
+ * Asks the download site for the latest release. An update button asks when the pointer reaches it
+ * and again when it is pressed, so an answer younger than `freshFor` milliseconds is reused, and
+ * askers that overlap share one request.
+ */
+export function checkForUpdate(freshFor: unknown = 0): Promise<UpdateInfo> {
+	if (!UPDATE_URL || info.stage === "downloading") return Promise.resolve(info);
+	const age = info.checkedAt ? Date.now() - Date.parse(info.checkedAt) : Number.POSITIVE_INFINITY;
+	if (typeof freshFor === "number" && age < freshFor) return Promise.resolve(info);
+	checking ??= askSite().finally(() => {
+		checking = undefined;
+	});
+	return checking;
+}
+
+/** A check that fails leaves the earlier offer as it was, so its download link still works. */
+async function askSite(): Promise<UpdateInfo> {
 	try {
 		const response = await fetch(UPDATE_URL, { signal: AbortSignal.timeout(15_000) });
 		if (!response.ok) throw new Error(`The update server answered ${response.status}`);
