@@ -1,5 +1,6 @@
 import type { LinkAdded, WorkspaceDocument } from "@shared/ipc";
 import { linkParts } from "@shared/links";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@ui-sdk/react/collapsible";
 import { FileText, Link2, Plus, Trash2, Upload } from "lucide-react";
 import { type CSSProperties, type DragEvent, useState } from "react";
 import { fileSize, relativeTime } from "../lib/format";
@@ -7,13 +8,16 @@ import { useResource } from "../lib/hooks";
 import { DocumentPreview, ownDocument } from "./DocumentPreview";
 import { droppedLink, LinkField } from "./Documents";
 import { MasterRecord } from "./MasterRecord";
-import { Button, IconButton } from "./ui";
+import { buttonClass, IconButton } from "./ui";
 
 /** The files and links the user has handed over, beside the master resume the agent wrote from them. */
 function DocumentsBar() {
 	const documents = useResource(() => window.desk.documents.list());
 	const links = useResource(() => window.desk.documents.links());
 	const [over, setOver] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	// Whether the place to add things is showing. Until the user says, it shows only while there is nothing yet.
+	const [adding, setAdding] = useState<boolean | null>(null);
 	// The file being previewed, and the one whose panel is still sliding away.
 	const [previewing, setPreviewing] = useState<string | null>(null);
 	const [leaving, setLeaving] = useState<string | null>(null);
@@ -21,6 +25,8 @@ function DocumentsBar() {
 	const linkList = links.data ?? [];
 	const preview = list.find((document) => document.name === previewing)?.name ?? null;
 	const inPanel = preview ?? leaving;
+	const empty = Boolean(documents.data && links.data) && list.length + linkList.length === 0;
+	const open = adding ?? empty;
 
 	const closePreview = () => {
 		setLeaving(preview);
@@ -28,6 +34,8 @@ function DocumentsBar() {
 	};
 
 	const accept = (next: WorkspaceDocument[]) => {
+		// The first document must not close what the user is adding into.
+		setAdding(open);
 		const known = new Set(list.map((document) => document.name));
 		const added = next.filter((document) => !known.has(document.name)).map((document) => document.name);
 		documents.setData(next);
@@ -41,13 +49,31 @@ function DocumentsBar() {
 		if (result.added?.kind === "link") void window.desk.agent.linksAdded([result.added.url]);
 	};
 
-	const onDrop = async (event: DragEvent) => {
+	/** Adding can fail part-way, on a file that cannot be read: say so, and hand over what did arrive. */
+	const bringIn = async (add: () => Promise<void>) => {
+		setError(null);
+		try {
+			await add();
+		} catch {
+			setError("Some documents could not be added. Check the list, then try again.");
+			await window.desk.documents
+				.list()
+				.then(accept)
+				.catch(() => {});
+		}
+	};
+
+	const pick = () => bringIn(async () => accept(await window.desk.documents.pick()));
+
+	const onDrop = (event: DragEvent) => {
 		event.preventDefault();
 		setOver(false);
 		const link = droppedLink(event);
 		const paths = [...event.dataTransfer.files].map((file) => window.desk.documents.pathForFile(file)).filter(Boolean);
-		if (paths.length) accept(await window.desk.documents.add(paths));
-		else if (link) acceptLink(await window.desk.documents.addLink(link));
+		void bringIn(async () => {
+			if (paths.length) accept(await window.desk.documents.add(paths));
+			else if (link) acceptLink(await window.desk.documents.addLink(link));
+		});
 	};
 
 	return (
@@ -78,17 +104,59 @@ function DocumentsBar() {
 			)}
 
 			{/* Sits over the preview's shadow, so the bar and the panel read as two sheets. */}
-			<div className="relative z-10 flex min-h-0 flex-1 flex-col bg-canvas">
-				<div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line pr-3 pl-4">
-					<h2 className="text-[13px] font-semibold">Your documents</h2>
-					<Button
-						size="sm"
-						icon={<Plus size={13} strokeWidth={2} aria-hidden />}
-						onClick={async () => accept(await window.desk.documents.pick())}
-					>
-						Add
-					</Button>
-				</div>
+			{/* The whole bar takes a drop, and a file dragged over it brings the place to drop it into view. */}
+			{/* biome-ignore lint/a11y/noStaticElementInteractions: drop target; the Add button covers keyboard and pointer use */}
+			<div
+				onDragOver={(event) => {
+					event.preventDefault();
+					setOver(true);
+					setAdding(true);
+				}}
+				onDragLeave={(event) => {
+					if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOver(false);
+				}}
+				onDrop={onDrop}
+				className="relative z-10 flex min-h-0 flex-1 flex-col bg-canvas"
+			>
+				<Collapsible open={open} onOpenChange={setAdding} className="shrink-0 border-b border-line">
+					<div className="flex h-11 items-center justify-between gap-3 pr-3 pl-4">
+						<h2 className="text-[13px] font-semibold">Your documents</h2>
+						<CollapsibleTrigger className={`group ${buttonClass("secondary", "sm", true)}`}>
+							<Plus
+								size={13}
+								strokeWidth={2}
+								className="transition-[rotate] duration-200 ease-(--ease-out) group-data-open:rotate-45 motion-reduce:transition-none"
+								aria-hidden
+							/>
+							{open ? "Close" : "Add"}
+						</CollapsibleTrigger>
+					</div>
+					<CollapsiblePanel keepMounted className="collapse-panel">
+						<div className="border-t border-line p-3">
+							<button
+								type="button"
+								onClick={() => void pick()}
+								className={`flex w-full flex-col items-center gap-1.5 rounded-lg border border-dashed px-4 py-5 text-center text-ink-3 transition-[background-color,border-color] duration-150 hover:bg-fill ${
+									over ? "border-accent bg-accent-wash text-accent-ink" : "border-line-strong"
+								}`}
+							>
+								<Upload size={15} strokeWidth={1.75} aria-hidden />
+								<span className="text-xs text-pretty">
+									{empty ? "No documents yet. " : ""}Drop a resume, certificate, reference, transcript or old cover
+									letter here, or click to choose files.
+								</span>
+							</button>
+							<div className="mt-2">
+								<LinkField onAdded={acceptLink} />
+							</div>
+							{error && (
+								<p role="alert" className="mt-2 text-xs text-danger">
+									{error}
+								</p>
+							)}
+						</div>
+					</CollapsiblePanel>
+				</Collapsible>
 
 				<div className="scroll-quiet min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pt-2 pb-4">
 					<ul>
@@ -153,27 +221,6 @@ function DocumentsBar() {
 						})}
 					</ul>
 
-					{/* biome-ignore lint/a11y/noStaticElementInteractions: drop target; the Add button covers keyboard and pointer use */}
-					<div
-						onDragOver={(event) => {
-							event.preventDefault();
-							setOver(true);
-						}}
-						onDragLeave={() => setOver(false)}
-						onDrop={(event) => void onDrop(event)}
-						className={`mx-1 mt-2 flex flex-col items-center gap-1.5 rounded-lg border border-dashed px-4 py-5 text-center text-ink-3 transition-[background-color,border-color] duration-150 ${
-							over ? "border-accent bg-accent-wash text-accent-ink" : "border-line-strong"
-						}`}
-					>
-						<Upload size={15} strokeWidth={1.75} aria-hidden />
-						<p className="text-xs text-pretty">
-							{list.length + linkList.length === 0 ? "No documents yet. " : ""}Drop a resume, certificate, reference,
-							transcript or old cover letter here.
-						</p>
-					</div>
-					<div className="mx-1 mt-2">
-						<LinkField onAdded={acceptLink} />
-					</div>
 					<p className="mx-2 mt-3 text-xs text-pretty text-ink-3">
 						The agent reads these to write your master resume. Remove one and it stops using it.
 					</p>

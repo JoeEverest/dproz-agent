@@ -1,7 +1,7 @@
 import type { LinkAdded, WorkspaceDocument } from "@shared/ipc";
 import { linkParts, normaliseLink } from "@shared/links";
 import { FilePlus2, FileText, Link2, X } from "lucide-react";
-import { type DragEvent, type FormEvent, useState } from "react";
+import { type DragEvent, type FormEvent, useRef, useState } from "react";
 import { fileSize } from "../lib/format";
 import { useResource } from "../lib/hooks";
 import { Button, IconButton, Input } from "./ui";
@@ -20,14 +20,18 @@ export function droppedLink(event: DragEvent): string | null {
 export function LinkField({ onAdded }: { onAdded: (result: LinkAdded) => void }) {
 	const [value, setValue] = useState("");
 	const [busy, setBusy] = useState(false);
+	// Enter pressed twice arrives before the first press has disabled the field.
+	const sending = useRef(false);
 	const [error, setError] = useState<string | null>(null);
 
 	const submit = async (event: FormEvent) => {
 		event.preventDefault();
+		if (sending.current) return;
 		if (!normaliseLink(value)) {
 			setError("That does not look like a web link.");
 			return;
 		}
+		sending.current = true;
 		setBusy(true);
 		setError(null);
 		try {
@@ -36,6 +40,7 @@ export function LinkField({ onAdded }: { onAdded: (result: LinkAdded) => void })
 		} catch {
 			setError("The link was not added. Try again.");
 		} finally {
+			sending.current = false;
 			setBusy(false);
 		}
 	};

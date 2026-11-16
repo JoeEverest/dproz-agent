@@ -345,6 +345,21 @@ try {
 	const origin = new URL(updateUrl).origin;
 	const linkField = window.getByRole("textbox", { name: "Link to a page or file about you" });
 	const addLink = window.getByRole("button", { name: "Add link" });
+	// With documents already there, the place to add more stays out of the way until it is asked for.
+	const addMore = window.getByRole("button", { name: "Add", exact: true });
+	check("the place to add documents is closed while there are documents", !(await linkField.isVisible()));
+	console.log(await shot(window, `platform-${process.platform}-documents-closed`));
+	await addMore.click();
+	await linkField.waitFor();
+	const dropZone = window.getByRole("button", { name: /Drop a resume/ });
+	await window.waitForTimeout(400);
+	const aboveList = await window.evaluate(() => {
+		const top = (element) => element.getBoundingClientRect().top;
+		const bar = document.querySelector('aside[aria-label="Your documents"]');
+		const zone = [...bar.querySelectorAll("button")].find((button) => button.textContent.includes("Drop a resume"));
+		return top(zone) < top(bar.querySelector("ul")) && !bar.querySelector(".scroll-quiet").contains(zone);
+	});
+	check("Add opens it above the list, outside the part that scrolls", aboveList);
 	const savedLinks = async () =>
 		JSON.parse(await fs.readFile(path.join(sandbox.workspace, "links.json"), "utf8").catch(() => "[]"));
 	await linkField.fill("my resume");
@@ -375,6 +390,50 @@ try {
 	await window.getByRole("button", { name: /Remove the link to 127\.0\.0\.1/ }).click();
 	await window.getByRole("button", { name: /Remove the link to/ }).waitFor({ state: "detached" });
 	check("a link can be removed", (await savedLinks()).length === 0);
+
+	// The file picker: it opens where the last file came from, and a failure is said out loud.
+	const certificates = path.join(sandbox.base, "certificates");
+	await fs.mkdir(certificates, { recursive: true });
+	await fs.writeFile(path.join(certificates, "Certificate.txt"), "A certificate");
+	await app.evaluate(({ dialog }) => {
+		globalThis.pickerAsked = [];
+		dialog.showOpenDialog = async (options) => {
+			globalThis.pickerAsked.push(options.defaultPath);
+			if (globalThis.pickerAnswer === "fail") throw new Error("The picker did not open");
+			return globalThis.pickerAnswer ?? { canceled: true, filePaths: [] };
+		};
+	});
+	const answer = (value) =>
+		app.evaluate((_, value) => {
+			globalThis.pickerAnswer = value;
+		}, value);
+	await answer({ canceled: false, filePaths: [path.join(certificates, "Certificate.txt")] });
+	await dropZone.click();
+	await window.getByRole("button", { name: "Preview Certificate.txt" }).waitFor();
+	await answer(undefined);
+	await dropZone.click();
+	await waitFor(async () => (await app.evaluate(() => globalThis.pickerAsked.length)) === 2);
+	const asked = await app.evaluate(() => globalThis.pickerAsked);
+	check(
+		"the file picker opens in the folder the last file came from",
+		asked[1] === certificates,
+		JSON.stringify(asked),
+	);
+	await answer("fail");
+	await dropZone.click();
+	check(
+		"a file picker that fails says so",
+		(await window.getByRole("alert").filter({ hasText: "Some documents could not be added" }).count()) === 1 ||
+			(await window
+				.getByRole("alert")
+				.filter({ hasText: "Some documents could not be added" })
+				.waitFor({ timeout: 5000 })
+				.then(() => true)),
+	);
+	console.log(await shot(window, `platform-${process.platform}-documents-open`));
+	await window.getByRole("button", { name: "Close", exact: true }).click();
+	await linkField.waitFor({ state: "hidden" });
+	check("and the same button closes it again", (await addMore.count()) === 1);
 
 	// The user's own files open in the same preview panel as a card's documents.
 	await window.getByRole("button", { name: "Preview Rehema Kisanga CV.pdf" }).click();
@@ -446,7 +505,7 @@ try {
 	// The edits of one sitting are gathered into one run, which waits while the agent is paused.
 	const waitForRun = async () => {
 		for (let waited = 0; waited < 40_000; waited += 1000) {
-			if ((await window.evaluate(() => window.desk.agent.state())).queued === 3) return true;
+			if ((await window.evaluate(() => window.desk.agent.state())).queued === 4) return true;
 			await window.waitForTimeout(1000);
 		}
 		return false;
