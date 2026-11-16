@@ -179,6 +179,12 @@ git tag v0.2.0 && git push origin v0.2.0
 
 The app icon is rendered from the Dproz logo by `node tools/icon.mjs` into `build/` (installers) and `resources/icon.png` (window and tray).
 
+Linux uses the generated PNG sizes in `build/icons/`. electron-builder installs
+them into the matching `hicolor/<size>x<size>/apps/` directories with the name
+`dproz-agent`, matching the desktop entry. Regenerate and include these files
+when changing the artwork; a lone 1024px PNG is not discoverable by themes whose
+index does not declare that size.
+
 ## Download site
 
 `site/` is the landing page, deployed to Vercel (`cd site && vercel deploy --prod`).
