@@ -196,7 +196,8 @@ index does not declare that size.
 
 | Variable | Purpose |
 | --- | --- |
-| `DPROZ_AGENT_USER_DATA` | Use another folder for settings, logins and the browser profile. |
+| `DPROZ_AGENT_USER_DATA` | Use another folder for settings, logins and the browser profile. Without it, a development run (`npm run dev`, `npm start`) uses `Dproz Agent Development` beside the installed app's folder, so it never works on your real applications and both can be open at once. |
+| `DPROZ_AGENT_DEV_NO_SANDBOX` | Linux only: set to `1` in `.env.development.local` if `npm run dev` stops with an error about the SUID sandbox helper. It starts the development run without Electron's sandbox. |
 | `DPROZ_AGENT_BROWSERS_PATH` | Where the agent's Chromium is installed. |
 | `DPROZ_AGENT_HEADLESS` | Run the agent's browser without a window. Hand-offs need a window, so this is for tests. |
 | `DPROZ_AGENT_TEST_ORIGIN` | Fence the agent to one origin (see Tests). |

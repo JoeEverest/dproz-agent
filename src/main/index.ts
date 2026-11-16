@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { app, BrowserWindow, Menu, nativeImage, nativeTheme, shell, Tray } from "electron";
 import { agent } from "./agent/manager";
@@ -16,6 +17,13 @@ if (process.env.DPROZ_AGENT_USER_DATA) {
 	// A test build is signed differently from the installed app, so macOS would stop it with a keychain
 	// prompt. Only a run with its own data folder may swap the keychain for Chromium's stand-in.
 	if (process.env.DPROZ_AGENT_MOCK_KEYCHAIN) app.commandLine.appendSwitch("use-mock-keychain");
+} else if (!app.isPackaged) {
+	// A development run keeps its own data folder. Sharing the installed app's would put a build in
+	// progress to work on the user's real applications, and its single-instance lock would only bring
+	// the installed app forward instead of starting.
+	const development = path.join(app.getPath("appData"), "Dproz Agent Development");
+	mkdirSync(development, { recursive: true });
+	app.setPath("userData", development);
 }
 registerPreviewScheme();
 
