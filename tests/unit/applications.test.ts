@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { APPLICATION_STATUSES, reassessable } from "../../src/shared/application";
 
 const state = vi.hoisted(() => ({ workspaceDir: "" }));
 
@@ -137,5 +138,48 @@ describe("application store", () => {
 			answer: "I do not have it.",
 			application: "Finance Officer at Kilele Foods Ltd",
 		});
+	});
+});
+
+describe("asking the agent to reassess a job", () => {
+	it("notes the request and what changed on that card, and nowhere else", async () => {
+		const { application } = await store.createApplication(job);
+		await store.patchApplication(application.id, { status: "closed", closedReason: "Needs five years in FMCG" });
+		await store.checkReassessable(application.id);
+		const noted = await store.startReassessment(application.id, "  I'd like to apply despite the travel.  ");
+
+		expect(noted.status).toBe("closed");
+		expect(noted.timeline.at(-1)?.event).toBe(
+			`You asked the agent to reassess this: "I'd like to apply despite the travel."`,
+		);
+		expect(await store.listInbox()).toEqual([]);
+		expect(await store.hasUndeliveredAnswers()).toBe(false);
+	});
+
+	it("notes a request with nothing said", async () => {
+		const { application } = await store.createApplication(job);
+		const noted = await store.startReassessment(application.id, "   ");
+		expect(noted.timeline.at(-1)?.event).toBe("You asked the agent to reassess this");
+	});
+
+	it("refuses an application that has already been sent, and leaves its history alone", async () => {
+		const { application } = await store.createApplication(job);
+		for (const status of ["applied", "interview"] as const) {
+			await store.patchApplication(application.id, { status });
+			const before = (await store.getApplication(application.id)).timeline;
+			await expect(store.checkReassessable(application.id)).rejects.toThrow("already been sent");
+			await expect(store.startReassessment(application.id, "Try again")).rejects.toThrow("already been sent");
+			expect((await store.getApplication(application.id)).timeline).toEqual(before);
+		}
+	});
+
+	it("allows every card that has not been sent", () => {
+		expect(APPLICATION_STATUSES.filter(reassessable)).toEqual([
+			"found",
+			"needs_input",
+			"ready_to_submit",
+			"manual",
+			"closed",
+		]);
 	});
 });

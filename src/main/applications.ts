@@ -11,6 +11,7 @@ import {
 	type QuestionReply,
 	questionSchema,
 	type RequirementKind,
+	reassessable,
 	STATUS_LABELS,
 } from "@shared/application";
 import { z } from "zod";
@@ -155,6 +156,27 @@ export function patchApplication(id: string, patch: ApplicationPatch, note?: str
 		}
 		if (note) timeline.push({ at: now(), event: note });
 		return persist({ ...current, ...patch, timeline }, current.status);
+	});
+}
+
+const NOT_REASSESSED = "This application has already been sent, so it was not reassessed.";
+
+/** Refuses a request to reassess an application that has already been sent. */
+export async function checkReassessable(id: string) {
+	if (!reassessable((await getApplication(id)).status)) throw new Error(NOT_REASSESSED);
+}
+
+/**
+ * Notes on a card that the user asked the agent to reassess it, with what they said changed. The
+ * note stays on this card: it is about this job, not a preference for every job.
+ */
+export function startReassessment(id: string, note?: string): Promise<Application> {
+	return serialized(async () => {
+		const current = await getApplication(id);
+		if (!reassessable(current.status)) throw new Error(NOT_REASSESSED);
+		const said = note?.trim();
+		const event = said ? `You asked the agent to reassess this: "${said}"` : "You asked the agent to reassess this";
+		return persist({ ...current, timeline: [...current.timeline, { at: now(), event }] }, current.status);
 	});
 }
 

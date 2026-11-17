@@ -393,6 +393,8 @@ export function Board({
 			<ApplicationDrawer
 				application={all.find((application) => application.id === openId) ?? null}
 				liveStep={openId ? live[openId] : undefined}
+				waiting={openId ? agent.waiting.includes(openId) : false}
+				paused={agent.paused}
 				onClose={() => setOpenId(null)}
 				onChanged={refresh}
 			/>

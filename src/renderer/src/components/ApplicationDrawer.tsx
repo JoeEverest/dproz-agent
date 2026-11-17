@@ -1,5 +1,11 @@
 import type { ApplicationDocument } from "@shared/application";
-import { APPLICATION_STATUSES, type Application, type ApplicationStatus, STATUS_LABELS } from "@shared/application";
+import {
+	APPLICATION_STATUSES,
+	type Application,
+	type ApplicationStatus,
+	reassessable,
+	STATUS_LABELS,
+} from "@shared/application";
 import {
 	AlertDialog,
 	AlertDialogBackdrop,
@@ -23,6 +29,7 @@ import {
 	CalendarClock,
 	Check,
 	CircleDashed,
+	Clock,
 	Copy,
 	Download,
 	ExternalLink,
@@ -36,18 +43,19 @@ import {
 	Mail,
 	MapPin,
 	Minus,
+	RotateCcw,
 	Send,
 	Target,
 	Trash2,
 	X,
 } from "lucide-react";
-import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { deadline, hostOf, relativeTime } from "../lib/format";
 import { fitLabel, statusIcon } from "./Board";
 import { cardDocument, DocumentPreview } from "./DocumentPreview";
 import { Markdown } from "./Markdown";
 import { QuestionForm } from "./QuestionForm";
-import { Button, buttonClass, Chip, IconButton, Picker } from "./ui";
+import { Button, buttonClass, Chip, IconButton, Picker, Textarea } from "./ui";
 
 const statusOptions = APPLICATION_STATUSES.map((status) => ({ value: status, label: STATUS_LABELS[status] }));
 const fitTone = { strong: "success", good: "success", stretch: "attention", poor: "danger" } as const;
@@ -179,11 +187,15 @@ function RemoveCard({ onConfirm }: { onConfirm: () => void }) {
 type DrawerProps = {
 	application: Application | null;
 	liveStep?: string;
+	/** The agent has this card in its queue to reassess. */
+	waiting?: boolean;
+	/** All work is paused, so a queued reassessment will not start yet. */
+	paused?: boolean;
 	onClose: () => void;
 	onChanged: () => Promise<void>;
 };
 
-export function ApplicationDrawer({ application, liveStep, onClose, onChanged }: DrawerProps) {
+export function ApplicationDrawer({ application, liveStep, waiting, paused, onClose, onChanged }: DrawerProps) {
 	const lastShown = useRef<Application | null>(null);
 	if (application) lastShown.current = application;
 	const shown = application ?? lastShown.current;
@@ -237,6 +249,8 @@ export function ApplicationDrawer({ application, liveStep, onClose, onChanged }:
 						<Sheet
 							application={shown}
 							liveStep={liveStep}
+							waiting={waiting}
+							paused={paused}
 							onClose={onClose}
 							onChanged={onChanged}
 							previewing={preview?.file}
@@ -249,21 +263,80 @@ export function ApplicationDrawer({ application, liveStep, onClose, onChanged }:
 	);
 }
 
+type ReassessFormProps = { application: Application; onCancel: () => void; onSent: () => Promise<void> };
+
+/** Asks the agent to look at one job again, with what changed if the user wants to say. */
+function ReassessForm({ application, onCancel, onSent }: ReassessFormProps) {
+	const [note, setNote] = useState("");
+	const [sending, setSending] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const submit = async (event: FormEvent) => {
+		event.preventDefault();
+		setSending(true);
+		setError(null);
+		try {
+			await window.desk.applications.reassess(application.id, note.trim() || undefined);
+			await onSent();
+		} catch (cause) {
+			setError((cause as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ""));
+			setSending(false);
+		}
+	};
+
+	return (
+		<form onSubmit={(event) => void submit(event)} className="mt-4 rounded-lg border border-line px-3 py-2.5">
+			<p className="font-medium">Reassess this job</p>
+			<p className="mt-0.5 text-xs text-ink-2">
+				The agent reads the posting again and decides with your profile, your answers and anything you add here. What
+				you write applies to this job only.
+			</p>
+			<Textarea
+				className="mt-2 max-h-40"
+				rows={2}
+				autoResize
+				autoFocus
+				value={note}
+				onValueChange={(value) => setNote(value)}
+				submitShortcut="mod+enter"
+				placeholder="What changed? (optional) For example: I'd like to apply despite the travel."
+				aria-label="What changed (optional)"
+			/>
+			{error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
+			<div className="mt-2 flex justify-end gap-2">
+				<Button size="sm" onClick={onCancel} disabled={sending}>
+					Cancel
+				</Button>
+				<Button type="submit" size="sm" tone="primary" disabled={sending}>
+					{sending ? "Asking" : "Reassess"}
+				</Button>
+			</div>
+		</form>
+	);
+}
+
 type SheetProps = {
 	application: Application;
 	liveStep?: string;
+	waiting?: boolean;
+	paused?: boolean;
 	onClose: () => void;
 	onChanged: () => Promise<void>;
 	previewing?: string;
 	onPreview: (document: ApplicationDocument) => void;
 };
 
-function Sheet({ application, liveStep, onClose, onChanged, previewing, onPreview }: SheetProps) {
+function Sheet({ application, liveStep, waiting, paused, onClose, onChanged, previewing, onPreview }: SheetProps) {
 	const settled = ["closed", "applied", "interview"].includes(application.status);
 	const due = deadline(application.closesAt);
 	const postingUrl = application.jobUrl ?? application.applyUrl;
 	const sent = application.status === "applied" || application.status === "interview";
 	const { icon: StatusIcon, color } = statusIcon[application.status];
+	const [reassessing, setReassessing] = useState(false);
+	// The drawer keeps its sheet while it slides away, so a half-written note belongs to its own card.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reset whenever another card is shown
+	useEffect(() => setReassessing(false), [application.id]);
+	const canReassess = reassessable(application.status) && !liveStep && !waiting;
 
 	const setStatus = async (status: ApplicationStatus) => {
 		await window.desk.applications.setStatus(application.id, status);
@@ -285,6 +358,16 @@ function Sheet({ application, liveStep, onClose, onChanged, previewing, onPrevie
 					<StatusIcon size={13} strokeWidth={2} className={`shrink-0 ${color}`} aria-hidden />
 					<span className="truncate text-ink-2">{STATUS_LABELS[application.status]}</span>
 				</p>
+				{canReassess && !reassessing && (
+					<Button
+						size="sm"
+						icon={<RotateCcw size={12} strokeWidth={2} aria-hidden />}
+						onClick={() => setReassessing(true)}
+						className="mr-1"
+					>
+						Reassess
+					</Button>
+				)}
 				{postingUrl && (
 					<IconButton label="Open the posting" onClick={() => void window.desk.shell.openExternal(postingUrl)}>
 						<ExternalLink size={15} strokeWidth={1.75} aria-hidden />
@@ -306,6 +389,28 @@ function Sheet({ application, liveStep, onClose, onChanged, previewing, onPrevie
 					{application.title}
 				</DrawerTitle>
 				<DrawerDescription className="selectable mt-0.5 text-ink-2">{application.company}</DrawerDescription>
+
+				{reassessing && canReassess && (
+					<ReassessForm
+						key={application.id}
+						application={application}
+						onCancel={() => setReassessing(false)}
+						onSent={async () => {
+							setReassessing(false);
+							await onChanged();
+						}}
+					/>
+				)}
+
+				{waiting && !liveStep && (
+					<p className="mt-4 flex items-center gap-2 rounded-lg bg-fill px-3 py-2 text-ink-2" aria-live="polite">
+						<Clock size={14} className="shrink-0" aria-hidden />
+						<span className="font-medium text-ink">Waiting to reassess this</span>
+						<span className="truncate text-xs">
+							{paused ? "The agent is paused. Resume it to start." : "It starts when the agent is free."}
+						</span>
+					</p>
+				)}
 
 				{liveStep && (
 					<p

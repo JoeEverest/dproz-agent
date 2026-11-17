@@ -5,7 +5,7 @@ import type { ActivityItem, AgentState } from "@shared/ipc";
 import { jobLinks } from "@shared/links";
 import { app } from "electron";
 import { runFinished, runStarted, track } from "../analytics";
-import { hasUndeliveredAnswers, listApplications } from "../applications";
+import { hasUndeliveredAnswers, listApplications, startReassessment } from "../applications";
 import { claudeEnvironment } from "../claude";
 import { connectionModel } from "../connection";
 import { broadcast } from "../events";
@@ -26,15 +26,37 @@ import {
 	linksPrompt,
 	onboardingPrompt,
 	profileEditedPrompt,
+	reassessPrompt,
 	subagents,
 	submitPrompt,
 	sweepPrompt,
 	systemPrompt,
 } from "./prompt";
 
-type RunKind = "onboard" | "sweep" | "answers" | "documents" | "links" | "add_job" | "submit" | "profile_edit";
+type RunKind =
+	| "onboard"
+	| "sweep"
+	| "answers"
+	| "documents"
+	| "links"
+	| "add_job"
+	| "submit"
+	| "profile_edit"
+	| "reassess";
 
-type RunRequest = { kind: RunKind; label: string; prompt: string; key?: string; submitAllowed?: boolean };
+type RunRequest = {
+	kind: RunKind;
+	label: string;
+	prompt: string;
+	key?: string;
+	submitAllowed?: boolean;
+	/** Checked as the run starts, after any wait in the queue: a run it refuses is skipped. */
+	start?: () => Promise<unknown>;
+	/** What the user said changed, for a reassessment. */
+	note?: string;
+};
+
+const REASSESS = "reassess:";
 
 type Persisted = { lastSweepAt?: string };
 
@@ -82,6 +104,7 @@ const dprozReachable = (fence: string | undefined) => !fence || (process.env.DPR
 class AgentManager {
 	private status: AgentState["status"] = "idle";
 	private runLabel: string | undefined;
+	private current: RunRequest | null = null;
 	private queue: RunRequest[] = [];
 	private abort: AbortController | null = null;
 	private activity: ActivityItem[] = [];
@@ -112,11 +135,15 @@ class AgentManager {
 	state(): AgentState {
 		const active: Record<string, string> = {};
 		for (const { applicationId, step } of this.delegations.values()) if (applicationId) active[applicationId] = step;
+		// A card being reassessed shows as worked on from the start, before a subagent picks it up.
+		const reassessing = this.current?.key?.startsWith(REASSESS) ? this.current.key.slice(REASSESS.length) : undefined;
+		if (reassessing && !active[reassessing]) active[reassessing] = "Reassessing";
 		return {
 			status: this.status,
 			runLabel: this.runLabel,
 			queued: this.queue.length,
 			active,
+			waiting: this.queue.flatMap(({ key }) => (key?.startsWith(REASSESS) ? [key.slice(REASSESS.length)] : [])),
 			step: this.delegations.get(COORDINATOR)?.step,
 			paused: this.paused,
 			browserOpen: this.held,
@@ -160,6 +187,25 @@ class AgentManager {
 			key: `submit:${applicationId}`,
 			prompt: submitPrompt(applicationId),
 			submitAllowed: true,
+		});
+	}
+
+	/**
+	 * The user asked the agent to look at one card again, perhaps saying what changed. Asking again
+	 * before it starts replaces the note, unless the new request says nothing.
+	 */
+	reassess(applicationId: string, note?: string) {
+		const key = `${REASSESS}${applicationId}`;
+		if (this.current?.key === key) return;
+		const said = note?.trim() || this.queue.find((queued) => queued.key === key)?.note;
+		this.queue = this.queue.filter((queued) => queued.key !== key);
+		this.enqueue({
+			kind: "reassess",
+			label: "Reassessing a job",
+			key,
+			note: said,
+			prompt: reassessPrompt(applicationId, said),
+			start: () => startReassessment(applicationId, said),
 		});
 	}
 
@@ -264,7 +310,19 @@ class AgentManager {
 	}
 
 	private async run(request: RunRequest): Promise<void> {
+		// Running from here, so nothing else starts while the request is checked.
 		this.status = "running";
+		this.current = request;
+		if (request.start) {
+			try {
+				await request.start();
+			} catch (error) {
+				this.status = "idle";
+				this.current = null;
+				this.notice("info", (error as Error).message);
+				return this.next();
+			}
+		}
 		this.runLabel = request.label;
 		this.abort = new AbortController();
 		this.publishState();
@@ -346,10 +404,15 @@ class AgentManager {
 		});
 		if (request.key === "sweep" && finished) this.persisted.lastSweepAt = startedAt;
 		this.abort = null;
+		this.current = null;
 		this.status = "idle";
 		this.runLabel = undefined;
 		this.delegations.clear();
 		void writeJson(stateFile(), this.persisted);
+		this.next();
+	}
+
+	private next() {
 		const next = this.paused || this.held ? undefined : this.queue.shift();
 		this.publishState();
 		if (next) void this.run(next);
