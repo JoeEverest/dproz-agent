@@ -42,6 +42,16 @@ export function linkParts(link: string): { site: string; page: string } {
 }
 
 /**
+ * The web links written out in an answer, with their https:// or http://, so a passing mention of a
+ * site name is not taken for one. Punctuation that ends the sentence is not part of the link.
+ */
+export function answerLinks(text: string): string[] {
+	const found = text.match(/https?:\/\/[^\s<>"'`]+/gi) ?? [];
+	const links = found.map((link) => normaliseLink(link.replace(/[.,;:!?)\]}]+$/, "")));
+	return [...new Set(links.filter((link): link is string => link !== null))];
+}
+
+/**
  * The job links in what the user pasted into Add a job, when links are all it is: one per line, or
  * separated by spaces or commas. A pasted posting is text, even if it has a link in it, so it gives none.
  */

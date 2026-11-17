@@ -44,6 +44,10 @@ export const questionSchema = z.object({
 	category: z.enum(REQUIREMENT_KINDS).optional(),
 	have: z.boolean().optional(),
 	answer: z.string().optional(),
+	// Names in documents/ of the files the user attached to their answer.
+	documents: z.array(z.string()).optional(),
+	// Links to pages the user wrote in their answer, kept with their other links.
+	links: z.array(z.string()).optional(),
 	askedAt: z.string(),
 	answeredAt: z.string().optional(),
 	deliveredAt: z.string().optional(),
@@ -114,6 +118,9 @@ export type QuestionReply = string | { have: boolean };
 /** A quick question that still needs its one-click answer. */
 export const awaitingChoice = (question: Question) =>
 	Boolean(question.item) && question.have === undefined && !question.answer;
+
+/** What an answer made only of attached files is recorded as. */
+export const attachedAnswer = (names: string[]) => `Attached ${names.join(", ")}.`;
 
 /** What a one-click answer is recorded as. */
 export const haveAnswer = (have: boolean) => (have ? "I have it." : "I do not have it.");

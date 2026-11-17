@@ -26,9 +26,9 @@ export function useOpenQuestions() {
 	useDeskEvent("applications:changed", () => void refresh());
 
 	const answer = useCallback(
-		async (question: OpenQuestion, reply: QuestionReply) => {
-			if (question.about) await window.desk.applications.answer(question.about.id, question.id, reply);
-			else await window.desk.inbox.answer(question.id, reply);
+		async (question: OpenQuestion, reply: QuestionReply, files: string[] = []) => {
+			if (question.about) await window.desk.applications.answer(question.about.id, question.id, reply, files);
+			else await window.desk.inbox.answer(question.id, reply, files);
 			await refresh();
 		},
 		[refresh],

@@ -6,6 +6,7 @@ import {
 	type Application,
 	type ApplicationStatus,
 	applicationSchema,
+	attachedAnswer,
 	haveAnswer,
 	type Question,
 	type QuestionReply,
@@ -13,10 +14,12 @@ import {
 	type RequirementKind,
 	STATUS_LABELS,
 } from "@shared/application";
+import { answerLinks } from "@shared/links";
 import { z } from "zod";
 import { broadcast } from "./events";
 import { exists, readJson, writeJson } from "./files";
-import { ensureWorkspace, workspacePaths } from "./workspace";
+import { keepAnswerLinks } from "./links";
+import { ensureWorkspace, forgetDocuments, importDocuments, rememberDocumentFolder, workspacePaths } from "./workspace";
 
 export type NewQuestion = {
 	question?: string;
@@ -34,6 +37,8 @@ export type AnsweredQuestion = {
 	answer: string;
 	item?: string;
 	have?: boolean;
+	documents?: string[];
+	links?: string[];
 };
 
 type StatusListener = (application: Application, previous: ApplicationStatus | null) => void;
@@ -179,16 +184,73 @@ const itemKey = (item: string) =>
 
 export const sameItem = (a?: string, b?: string) => Boolean(a && b) && itemKey(a ?? "") === itemKey(b ?? "");
 
-/** A question after the user replies: a click on a quick question, or the text of an answer to an open one. */
-export function applyReply(question: Question, reply: QuestionReply): Question {
+/** What the user gave with an answer: names of files now in documents/, and links to pages. */
+type Evidence = { documents: string[]; links: string[] };
+
+const NO_EVIDENCE: Evidence = { documents: [], links: [] };
+
+/**
+ * A question after the user replies: a click on a quick question, or the text of an answer to an open
+ * one, with the documents and links that came with it.
+ */
+export function applyReply(question: Question, reply: QuestionReply, evidence: Evidence = NO_EVIDENCE): Question {
+	const { documents, links } = evidence;
 	const settled = (fields: Partial<Question>) => ({
 		...question,
 		...fields,
+		documents: documents.length ? documents : undefined,
+		links: links.length ? links : undefined,
 		answeredAt: now(),
 		deliveredAt: undefined,
 	});
 	if (typeof reply !== "string") return settled({ have: reply.have, answer: haveAnswer(reply.have) });
-	return settled({ answer: reply.trim() });
+	const text = reply.trim() || (documents.length ? attachedAnswer(documents) : "");
+	if (!text) throw new Error("An answer needs text or a document.");
+	return settled({ answer: text });
+}
+
+/** Records a reply on the question it answers; what came with it must not be kept for no question. */
+function replyTo(questions: Question[], questionId: string, reply: QuestionReply, evidence: Evidence) {
+	const given = evidence.documents.length + evidence.links.length > 0;
+	if (given && !questions.some((question) => question.id === questionId)) {
+		throw new Error("That question is no longer waiting for an answer.");
+	}
+	return questions.map((question) => (question.id === questionId ? applyReply(question, reply, evidence) : question));
+}
+
+/**
+ * Answers with the files attached and the links written in the reply. Files are copied into
+ * documents/ and links kept as addLink keeps them before the answer is saved, outside the store's
+ * queue since a link may take a while to fetch; if the answer is then not saved, all of it is taken
+ * back, so neither is kept without the other. `answer` calls `kept` once the answer is saved.
+ */
+async function withEvidence<T>(
+	reply: QuestionReply,
+	files: string[],
+	answer: (evidence: Evidence, kept: () => void) => Promise<T>,
+): Promise<T> {
+	const documents = files.length ? await importDocuments(files) : [];
+	const urls = typeof reply === "string" ? answerLinks(reply) : [];
+	let fromLinks: Awaited<ReturnType<typeof keepAnswerLinks>> | undefined;
+	let saved = false;
+	try {
+		if (urls.length) fromLinks = await keepAnswerLinks(urls);
+		const evidence = {
+			documents: [...documents, ...(fromLinks?.documents ?? [])],
+			links: fromLinks?.links ?? [],
+		};
+		const result = await answer(evidence, () => {
+			saved = true;
+		});
+		await rememberDocumentFolder(files);
+		return result;
+	} catch (error) {
+		if (!saved) {
+			await forgetDocuments(documents);
+			await fromLinks?.undo();
+		}
+		throw error;
+	}
 }
 
 /**
@@ -221,17 +283,23 @@ export function askApplicationQuestions(id: string, questions: NewQuestion[]): P
 	});
 }
 
-export function answerApplicationQuestion(id: string, questionId: string, reply: QuestionReply): Promise<Application> {
-	return serialized(async () => {
-		const current = await getApplication(id);
-		const questions = current.questions.map((question) =>
-			question.id === questionId ? applyReply(question, reply) : question,
-		);
-		const saved = await persist({ ...current, questions }, current.status);
-		const answered = questions.find((question) => question.id === questionId);
-		if (answered) await shareAnswer(answered);
-		return saved;
-	});
+export function answerApplicationQuestion(
+	id: string,
+	questionId: string,
+	reply: QuestionReply,
+	files: string[] = [],
+): Promise<Application> {
+	return withEvidence(reply, files, (evidence, kept) =>
+		serialized(async () => {
+			const current = await getApplication(id);
+			const questions = replyTo(current.questions, questionId, reply, evidence);
+			const saved = await persist({ ...current, questions }, current.status);
+			kept();
+			const answered = saved.questions.find((question) => question.id === questionId);
+			if (answered) await shareAnswer(answered);
+			return saved;
+		}),
+	);
 }
 
 export async function removeApplication(id: string) {
@@ -258,16 +326,20 @@ export function askInboxQuestions(questions: NewQuestion[]): Promise<Question[]>
 	return serialized(async () => saveInbox([...(await listInbox()), ...toQuestions(questions)]));
 }
 
-export function answerInboxQuestion(questionId: string, reply: QuestionReply): Promise<Question[]> {
-	return serialized(async () => {
-		const questions = (await listInbox()).map((question) =>
-			question.id === questionId ? applyReply(question, reply) : question,
-		);
-		await saveInbox(questions);
-		const answered = questions.find((question) => question.id === questionId);
-		if (answered) await shareAnswer(answered);
-		return listInbox();
-	});
+export function answerInboxQuestion(
+	questionId: string,
+	reply: QuestionReply,
+	files: string[] = [],
+): Promise<Question[]> {
+	return withEvidence(reply, files, (evidence, kept) =>
+		serialized(async () => {
+			const questions = await saveInbox(replyTo(await listInbox(), questionId, reply, evidence));
+			kept();
+			const answered = questions.find((question) => question.id === questionId);
+			if (answered) await shareAnswer(answered);
+			return listInbox();
+		}),
+	);
 }
 
 const awaitingDelivery = (question: Question) => Boolean(question.answer) && !question.deliveredAt;
@@ -285,8 +357,16 @@ export function collectUndeliveredAnswers(): Promise<AnsweredQuestion[]> {
 		const answers: AnsweredQuestion[] = [];
 		const deliver = (question: Question, origin: Pick<AnsweredQuestion, "applicationId" | "application">) => {
 			if (!awaitingDelivery(question)) return question;
-			const { item, have } = question;
-			answers.push({ ...origin, question: question.question, answer: question.answer ?? "", item, have });
+			const { item, have, documents, links } = question;
+			answers.push({
+				...origin,
+				question: question.question,
+				answer: question.answer ?? "",
+				item,
+				have,
+				documents,
+				links,
+			});
 			return { ...question, deliveredAt };
 		};
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import http from "node:http";
 import path from "node:path";
 import { createSandbox, launchApp, shot } from "./harness.mjs";
 
@@ -419,6 +420,135 @@ try {
 	check("a question reopened after a successful answer is available again", (await box.inputValue()) === "");
 	await answer("Updated availability");
 	await form.getByRole("textbox", { name: "Your answer", exact: true }).waitFor();
+
+	// Documents attached to an answer wait with their question and are only added when it is sent.
+	const attachDir = path.join(sandbox.base, "attach");
+	await fs.mkdir(attachDir, { recursive: true });
+	const note = path.join(attachDir, "note.txt");
+	const documentsDir = path.join(sandbox.workspace, "documents");
+	const stored = async () => (await fs.readdir(documentsDir).catch(() => [])).sort();
+	await app.evaluate(({ dialog }) => {
+		dialog.showOpenDialog = async () => globalThis.pickerAnswer ?? { canceled: true, filePaths: [] };
+	});
+	const chooseFiles = async (filePaths) => {
+		await app.evaluate(
+			(_, value) => {
+				globalThis.pickerAnswer = value;
+			},
+			filePaths ? { canceled: false, filePaths } : null,
+		);
+		await form.getByRole("button", { name: "Attach a document" }).click();
+	};
+	const reply = (id) => history.locator(`li[data-message='a-${JSON.stringify([null, id])}']`);
+	const chips = form.getByRole("list", { name: "Attached documents" }).getByRole("listitem");
+	inbox = await readInbox();
+	inbox.push(typed("A1", 60), typed("A3", 61), quick("A2", 62));
+	await write();
+	await activeQuick("A2");
+	await pick("A1");
+	await activeTyped("A1");
+	await chooseFiles(null);
+	await window.waitForTimeout(150);
+	check("a cancelled picker attaches nothing", (await chips.count()) === 0);
+	await fs.writeFile(note, "A synthetic note");
+	await chooseFiles([note]);
+	await chips.first().waitFor();
+	check("a chosen file waits beside the answer without being added", (await stored()).length === 0);
+	await pick("A3");
+	await activeTyped("A3");
+	check("another question does not show the first one's files", (await chips.count()) === 0);
+	await chooseFiles([note]);
+	await chips.first().waitFor();
+	await form.getByRole("button", { name: "Remove note.txt" }).click();
+	check("a file can be removed before sending", (await chips.count()) === 0 && (await stored()).length === 0);
+	await pick("A1");
+	await activeTyped("A1");
+	check("switching back keeps the files attached to that question", (await chips.count()) === 1);
+
+	await fs.rm(note);
+	await answer("My certificate is attached");
+	await form.getByRole("alert").waitFor();
+	check(
+		"a file that cannot be read fails the send and keeps the draft and files",
+		(await form.getByRole("alert").textContent()) === "That did not send: note.txt could not be read" &&
+			(await box.inputValue()) === "My certificate is attached" &&
+			(await chips.count()) === 1 &&
+			(await stored()).length === 0 &&
+			!(await readInbox()).find((question) => question.id === "A1").answer,
+	);
+	await fs.writeFile(note, "A synthetic note");
+	await form.getByRole("button", { name: "Send answer", exact: true }).click();
+	await activeQuick("A2");
+	const sentA1 = (await readInbox()).find((question) => question.id === "A1");
+	check(
+		"a retry sends the answer with one stored copy of its file",
+		sentA1.answer === "My certificate is attached" &&
+			sentA1.documents?.join() === "note.txt" &&
+			(await stored()).join() === "note.txt",
+	);
+	check(
+		"the sent answer shows its file in history",
+		(await reply("A1").getByRole("listitem").filter({ hasText: "note.txt" }).count()) === 1,
+	);
+
+	await chooseFiles([note]);
+	await chips.first().waitFor();
+	console.log(await shot(window, "questions-attach-quick"));
+	await form.getByRole("button", { name: /I have it/ }).click();
+	await activeTyped("A3");
+	const sentA2 = (await readInbox()).find((question) => question.id === "A2");
+	check(
+		"a quick answer carries its file under a free name beside the existing one",
+		sentA2.have === true &&
+			sentA2.documents?.join() === "note 2.txt" &&
+			(await stored()).join() === "note 2.txt,note.txt",
+	);
+	check(
+		"Send waits for text or a file",
+		await form.getByRole("button", { name: "Send answer", exact: true }).isDisabled(),
+	);
+	await chooseFiles([note]);
+	await chips.first().waitFor();
+	check("a file alone can be sent", await form.getByRole("button", { name: "Send answer", exact: true }).isEnabled());
+	await form.getByRole("button", { name: "Send answer", exact: true }).click();
+	await form.getByRole("textbox", { name: "Your answer", exact: true }).waitFor();
+	const sentA3 = (await readInbox()).find((question) => question.id === "A3");
+	check(
+		"a file-only answer reads as the file",
+		sentA3.answer === "Attached note 3.txt." &&
+			(await reply("A3").locator("p").first().textContent()) !== sentA3.answer,
+	);
+	// Links written in an answer are kept like links added in Profile: a page as a link, a file as a document.
+	const server = http.createServer((request, response) => {
+		if (request.url === "/cv.pdf") response.writeHead(200, { "content-type": "application/pdf" }).end("%PDF-1.4 test");
+		else response.writeHead(200, { "content-type": "text/html" }).end("<h1>Portfolio</h1>");
+	});
+	await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+	const site = `http://127.0.0.1:${server.address().port}`;
+	inbox = await readInbox();
+	inbox.push(typed("A4", 63));
+	await write();
+	await activeTyped("A4");
+	await box.fill(`My work is at ${site}/portfolio and my CV is ${site}/cv.pdf.`);
+	check(
+		"a link in the answer says it will be added to the profile",
+		(await form.getByText("Links in it are added to your profile.", { exact: false }).count()) === 1,
+	);
+	await form.getByRole("button", { name: "Send answer", exact: true }).click();
+	await form.getByRole("textbox", { name: "Your answer", exact: true }).waitFor();
+	server.close();
+	const sentA4 = (await readInbox()).find((question) => question.id === "A4");
+	const keptLinks = JSON.parse(await fs.readFile(path.join(sandbox.workspace, "links.json"), "utf8"));
+	check(
+		"a page link is kept with the profile links and a file link becomes a document",
+		sentA4.links?.join() === `${site}/portfolio` &&
+			sentA4.documents?.join() === "cv.pdf" &&
+			keptLinks.map((link) => link.url).join() === `${site}/portfolio` &&
+			(await stored()).includes("cv.pdf"),
+	);
+	await window.getByRole("button", { name: "Jump to latest" }).click();
+	await window.waitForTimeout(400);
+	console.log(await shot(window, "questions-attach-history"));
 	inbox = [];
 	await fs.rm(jobFolder, { recursive: true });
 	await write();

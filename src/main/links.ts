@@ -82,6 +82,47 @@ export async function addLink(input: string): Promise<LinkAdded> {
 	return { documents: await listDocuments(), links: next, added: { kind: "link", url } };
 }
 
+/**
+ * Keeps the links the user wrote in an answer, as addLink would: a link to a file is downloaded into
+ * documents/, a link to a page is added to their links. `undo` takes back only what was new, for an
+ * answer that could not be saved.
+ */
+export async function keepAnswerLinks(urls: string[]) {
+	const known = await listLinks();
+	const documents: string[] = [];
+	const links: string[] = [];
+	const added: SourceLink[] = [];
+	const { documents: folder } = await workspacePaths();
+	const undo = async () => {
+		await Promise.all(documents.map((name) => fs.rm(path.join(folder, name), { force: true })));
+		if (!added.length) return;
+		const fresh = new Set(added.map((link) => link.url));
+		await writeJson(
+			await linksFile(),
+			(await listLinks()).filter((link) => !fresh.has(link.url)),
+		);
+	};
+	try {
+		for (const url of urls) {
+			const file = known.some((link) => link.url === url) ? null : await fetchFile(url);
+			if (file) {
+				await fs.mkdir(folder, { recursive: true });
+				const name = await freeName(folder, file.name);
+				await fs.writeFile(path.join(folder, name), file.bytes, { flag: "wx" });
+				documents.push(name);
+				continue;
+			}
+			links.push(url);
+			if (!known.some((link) => link.url === url)) added.push({ url, addedAt: new Date().toISOString() });
+		}
+		if (added.length) await writeJson(await linksFile(), [...(await listLinks()), ...added]);
+	} catch (error) {
+		await undo();
+		throw error;
+	}
+	return { documents, links, undo };
+}
+
 export async function removeLink(url: string): Promise<SourceLink[]> {
 	const next = (await listLinks()).filter((link) => link.url !== url);
 	await writeJson(await linksFile(), next);

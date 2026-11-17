@@ -192,7 +192,7 @@ Never ask the user to explain, quantify or expand on what is already in about-me
 			),
 			tool(
 				"get_answers",
-				"Collect the answers the user has given since you last checked, and see everything you have asked before. A new answer is returned once, so work it into about-me.md before moving on. askedBefore is your record of past questions, answered or not (answer is null while one is waiting): never ask any of them again.",
+				"Collect the answers the user has given since you last checked, and see everything you have asked before. A new answer is returned once, so work it into about-me.md before moving on. documents names files in documents/ the user attached to that answer, and links names pages they gave in it: read them before using it. askedBefore is your record of past questions, answered or not (answer is null while one is waiting): never ask any of them again.",
 				{},
 				guarded(async () => {
 					// Read the record first: collecting marks the new answers as delivered.

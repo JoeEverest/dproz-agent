@@ -3,14 +3,18 @@ import os from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ workspaceDir: "" }));
+const state = vi.hoisted(() => ({ workspaceDir: "", lastDocumentDirectory: undefined as string | undefined }));
 
 vi.mock("electron", () => ({ BrowserWindow: { getAllWindows: () => [] }, app: { getPath: () => state.workspaceDir } }));
-vi.mock("../../src/main/settings", () => ({ getSettings: async () => ({ workspaceDir: state.workspaceDir }) }));
+vi.mock("../../src/main/settings", () => ({
+	getSettings: async () => ({ workspaceDir: state.workspaceDir }),
+	updateSettings: async (patch: object) => Object.assign(state, patch),
+}));
 
 const store = await import("../../src/main/applications");
 
 beforeEach(async () => {
+	state.lastDocumentDirectory = undefined;
 	state.workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "dproz-agent-"));
 });
 
@@ -137,5 +141,116 @@ describe("application store", () => {
 			answer: "I do not have it.",
 			application: "Finance Officer at Kilele Foods Ltd",
 		});
+	});
+});
+
+describe("documents attached to an answer", () => {
+	const attachment = async (name: string) => {
+		const folder = await fs.mkdtemp(path.join(os.tmpdir(), "dproz-attach-"));
+		const file = path.join(folder, name);
+		await fs.writeFile(file, `Synthetic ${name}`);
+		return file;
+	};
+	const documentsDir = () => path.join(state.workspaceDir, "documents");
+
+	it("copies the files into documents/ and gives their stored names to the agent with the answer", async () => {
+		await store.askInboxQuestions([{ item: "A CPA certificate", category: "certifications" }]);
+		const [question] = await store.listInbox();
+		await fs.mkdir(documentsDir(), { recursive: true });
+		await fs.writeFile(path.join(documentsDir(), "certificate.pdf"), "Already in the profile");
+
+		const file = await attachment("certificate.pdf");
+		await store.answerInboxQuestion(question.id, { have: true }, [file]);
+		expect(state.lastDocumentDirectory).toBe(path.dirname(file));
+		const [answered] = await store.listInbox();
+		expect(answered).toMatchObject({ have: true, answer: "I have it.", documents: ["certificate 2.pdf"] });
+		expect(await fs.readFile(path.join(documentsDir(), "certificate.pdf"), "utf8")).toBe("Already in the profile");
+		const [delivered] = await store.collectUndeliveredAnswers();
+		expect(delivered.documents).toEqual(["certificate 2.pdf"]);
+	});
+
+	it("records an answer made only of files as those files", async () => {
+		await store.askInboxQuestions([{ question: "Can you share your transcript?" }]);
+		const [question] = await store.listInbox();
+		await store.answerInboxQuestion(question.id, "  ", [await attachment("transcript.pdf")]);
+		const [answered] = await store.listInbox();
+		expect(answered.answer).toBe("Attached transcript.pdf.");
+		expect(answered.documents).toEqual(["transcript.pdf"]);
+	});
+
+	it("keeps neither the answer nor any copied file when a file cannot be read", async () => {
+		const { application } = await store.createApplication(job);
+		const asked = await store.askApplicationQuestions(application.id, [{ question: "Referee?" }]);
+		const missing = path.join(os.tmpdir(), "dproz-no-such-file.pdf");
+		await expect(
+			store.answerApplicationQuestion(application.id, asked.questions[0].id, "See attached", [
+				await attachment("reference.pdf"),
+				missing,
+			]),
+		).rejects.toThrow("dproz-no-such-file.pdf could not be read");
+		expect((await store.getApplication(application.id)).questions[0].answer).toBeUndefined();
+		expect(await fs.readdir(documentsDir())).toEqual([]);
+		expect(state.lastDocumentDirectory).toBeUndefined();
+	});
+
+	it("takes the copied files back out when the question is no longer waiting", async () => {
+		await expect(store.answerInboxQuestion("gone", "Here", [await attachment("letter.pdf")])).rejects.toThrow(
+			"no longer waiting",
+		);
+		expect(await fs.readdir(documentsDir())).toEqual([]);
+	});
+
+	it("still needs text or a file", async () => {
+		await store.askInboxQuestions([{ question: "Start date?" }]);
+		const [question] = await store.listInbox();
+		await expect(store.answerInboxQuestion(question.id, " ")).rejects.toThrow("needs text or a document");
+	});
+});
+
+describe("links written in an answer", () => {
+	const page = () => new Response("<html></html>", { headers: { "content-type": "text/html" } });
+	const pdf = (url: string) =>
+		Object.defineProperty(new Response("%PDF-1.4 test", { headers: { "content-type": "application/pdf" } }), "url", {
+			value: url,
+		});
+	const linksFile = () => path.join(state.workspaceDir, "links.json");
+	const savedLinks = async () => JSON.parse(await fs.readFile(linksFile(), "utf8").catch(() => "[]"));
+	const documentsDir = () => path.join(state.workspaceDir, "documents");
+
+	it("keeps a page as a link and downloads a file as a document, and gives both to the agent", async () => {
+		vi.stubGlobal("fetch", async (url: string) => (url.endsWith(".pdf") ? pdf(url) : page()));
+		await store.askInboxQuestions([{ question: "Is there a portfolio the employer should see?" }]);
+		const [question] = await store.listInbox();
+		await store.answerInboxQuestion(question.id, "Yes: https://me.example/work and https://me.example/cv.pdf.");
+		const [answered] = await store.listInbox();
+		expect(answered.links).toEqual(["https://me.example/work"]);
+		expect(answered.documents).toEqual(["cv.pdf"]);
+		expect((await savedLinks()).map((link: { url: string }) => link.url)).toEqual(["https://me.example/work"]);
+		const [delivered] = await store.collectUndeliveredAnswers();
+		expect(delivered).toMatchObject({ links: ["https://me.example/work"], documents: ["cv.pdf"] });
+		vi.unstubAllGlobals();
+	});
+
+	it("takes back only the new link and download when the answer cannot be saved", async () => {
+		vi.stubGlobal("fetch", async (url: string) => (url.endsWith(".pdf") ? pdf(url) : page()));
+		const existing = [{ url: "https://me.example/github", addedAt: "2026-11-01T00:00:00.000Z" }];
+		await fs.writeFile(linksFile(), JSON.stringify(existing));
+		await expect(
+			store.answerInboxQuestion("gone", "https://me.example/github https://me.example/new https://me.example/cv.pdf"),
+		).rejects.toThrow("no longer waiting");
+		expect(await savedLinks()).toEqual(existing);
+		expect(await fs.readdir(documentsDir()).catch(() => [])).toEqual([]);
+		vi.unstubAllGlobals();
+	});
+
+	it("leaves a one-click answer alone", async () => {
+		const fetch = vi.fn();
+		vi.stubGlobal("fetch", fetch);
+		await store.askInboxQuestions([{ item: "https://not-a-link.example skills", category: "skills" }]);
+		const [question] = await store.listInbox();
+		await store.answerInboxQuestion(question.id, { have: true });
+		expect(fetch).not.toHaveBeenCalled();
+		expect((await store.listInbox())[0].links).toBeUndefined();
+		vi.unstubAllGlobals();
 	});
 });

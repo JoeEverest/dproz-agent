@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { downloadAddress, jobLinks, linkParts, normaliseLink } from "../../src/shared/links";
+import { answerLinks, downloadAddress, jobLinks, linkParts, normaliseLink } from "../../src/shared/links";
 
 describe("normaliseLink", () => {
 	it("accepts a web address with or without https://", () => {
@@ -67,5 +67,20 @@ describe("jobLinks", () => {
 	it("treats a pasted posting as text, even with a link in it", () => {
 		expect(jobLinks("Accountant at Acme. Apply at https://acme.example/apply")).toEqual([]);
 		expect(jobLinks("")).toEqual([]);
+	});
+});
+
+describe("answerLinks", () => {
+	it("finds the web links written out in an answer, without the sentence's punctuation", () => {
+		expect(
+			answerLinks(
+				"Yes, see https://namestarlit.example/w/zanlis. Also (http://cv.example/me.pdf), https://namestarlit.example/w/zanlis!",
+			),
+		).toEqual(["https://namestarlit.example/w/zanlis", "http://cv.example/me.pdf"]);
+	});
+
+	it("does not take a site's name or other text for a link", () => {
+		expect(answerLinks("I worked at example.com and know ftp://old.example")).toEqual([]);
+		expect(answerLinks("")).toEqual([]);
 	});
 });
