@@ -1,13 +1,14 @@
-import type { Question, QuestionReply } from "@shared/application";
-import { useCallback, useEffect, useState } from "react";
+import type { QuestionReply } from "@shared/application";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDeskEvent } from "./hooks";
-
-export type OpenQuestion = Question & { about?: { id: string; label: string } };
+import { byArrival, type OpenQuestion } from "./questionOrder";
 
 export function useOpenQuestions() {
 	const [history, setHistory] = useState<OpenQuestion[]>([]);
+	const request = useRef(0);
 
 	const refresh = useCallback(async () => {
+		const version = ++request.current;
 		const [inbox, applications] = await Promise.all([window.desk.inbox.list(), window.desk.applications.list()]);
 		const fromCards = applications.flatMap((application) =>
 			application.questions.map((question) => ({
@@ -15,7 +16,7 @@ export function useOpenQuestions() {
 				about: { id: application.id, label: `${application.title} at ${application.company}` },
 			})),
 		);
-		setHistory([...inbox, ...fromCards].sort((a, b) => a.askedAt.localeCompare(b.askedAt)));
+		if (version === request.current) setHistory([...inbox, ...fromCards].sort(byArrival));
 	}, []);
 
 	useEffect(() => {

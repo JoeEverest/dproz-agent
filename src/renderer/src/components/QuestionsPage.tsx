@@ -1,13 +1,23 @@
 import { awaitingChoice, type QuestionReply } from "@shared/application";
 import { Textarea } from "@ui-sdk/react/textarea";
-import { ArrowUp, Bot, Briefcase, CheckCheck, ChevronLeft, ChevronRight, CornerDownRight } from "lucide-react";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import {
+	ArrowDown,
+	ArrowUp,
+	Bot,
+	Briefcase,
+	CheckCheck,
+	ChevronLeft,
+	ChevronRight,
+	CornerDownRight,
+} from "lucide-react";
+import { type FormEvent, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import { useAgentState } from "../lib/agent";
 import { relativeTime } from "../lib/format";
-import type { OpenQuestion } from "../lib/questions";
+import { type OpenQuestion, questionKey, questionQueue } from "../lib/questionOrder";
+import { useQuestionScroll } from "../lib/useQuestionScroll";
 import { HaveChoice } from "./HaveChoice";
 import { PageHeader } from "./PageHeader";
-import { Chip, IconButton } from "./ui";
+import { Button, Chip, IconButton } from "./ui";
 
 const sendKey = navigator.platform.startsWith("Mac") ? "⌘ Return" : "Ctrl Enter";
 
@@ -34,7 +44,7 @@ type AgentMessageProps = { question: OpenQuestion; replying: boolean; canPick: b
 function AgentMessage({ question, replying, canPick, onPick }: AgentMessageProps) {
 	const quick = Boolean(question.item);
 	return (
-		<li className="flex items-start gap-2.5">
+		<li data-message={`q-${questionKey(question)}`} className="flex items-start gap-2.5">
 			<Avatar />
 			<div className="min-w-0 max-w-[78%]">
 				<p className="mb-1 flex items-baseline gap-2 text-xs">
@@ -75,7 +85,7 @@ function UserMessage({ question }: { question: OpenQuestion }) {
 	const text =
 		question.item && question.have !== undefined ? (question.have ? "I have it" : "Not yet") : question.answer;
 	return (
-		<li className="flex flex-col items-end">
+		<li data-message={`a-${questionKey(question)}`} className="flex flex-col items-end">
 			<p className="selectable max-w-[78%] rounded-2xl rounded-tr-md bg-solid px-3.5 py-2.5 whitespace-pre-wrap text-on-solid">
 				{text}
 			</p>
@@ -105,31 +115,43 @@ function Working({ label }: { label: string }) {
 }
 
 type ComposerProps = {
+	formRef: RefObject<HTMLFormElement | null>;
 	open: OpenQuestion[];
 	target: OpenQuestion | undefined;
-	onPick: (id: string) => void;
+	onPick: (question: OpenQuestion) => void;
+	unavailable: boolean;
+	onContinue: () => void;
+	onSaving: (saving: boolean) => void;
 	onAnswer: (question: OpenQuestion, reply: QuestionReply) => Promise<void>;
 };
 
-function Composer({ open, target, onPick, onAnswer }: ComposerProps) {
-	const [draft, setDraft] = useState("");
+function Composer({ formRef, open, target, onPick, onAnswer, unavailable, onContinue, onSaving }: ComposerProps) {
+	const [drafts, setDrafts] = useState<Record<string, string>>({});
+	const key = target ? questionKey(target) : "";
+	const draft = drafts[key] ?? "";
+	const sending = useRef(false);
 	const [saving, setSaving] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-	const position = target ? open.indexOf(target) : 0;
+	const [errors, setErrors] = useState<Record<string, string>>({});
+	const error = errors[key];
+	const position = open.findIndex((question) => questionKey(question) === key);
 	// A quick question is answered with a click, and only with a click.
 	const choosing = Boolean(target && awaitingChoice(target));
 
 	const send = async (reply: QuestionReply) => {
-		if (!target) return;
+		if (!target || unavailable || sending.current) return;
+		sending.current = true;
 		setSaving(true);
-		setError(null);
+		onSaving(true);
+		setErrors((current) => ({ ...current, [key]: "" }));
 		try {
 			await onAnswer(target, reply);
-			setDraft("");
+			setDrafts((current) => ({ ...current, [key]: "" }));
 		} catch (cause) {
-			setError(`That did not send: ${(cause as Error).message}`);
+			setErrors((current) => ({ ...current, [key]: `That did not send: ${(cause as Error).message}` }));
 		} finally {
+			sending.current = false;
 			setSaving(false);
+			onSaving(false);
 		}
 	};
 
@@ -139,25 +161,29 @@ function Composer({ open, target, onPick, onAnswer }: ComposerProps) {
 	};
 
 	const step = (by: number) => {
-		onPick(open[(position + by + open.length) % open.length].id);
-		setDraft("");
+		onPick(open[(position + by + open.length) % open.length]);
 	};
 
 	return (
-		<form onSubmit={submit} className="mx-auto w-full max-w-[720px] shrink-0 px-6 pb-5">
+		<form
+			ref={formRef}
+			aria-label="Answer the selected question"
+			onSubmit={submit}
+			className="mx-auto max-h-[60%] w-full max-w-[720px] shrink-0 overflow-y-auto px-6 pb-5"
+		>
 			<div className="rounded-2xl border border-line-strong bg-surface shadow-[0_1px_2px_rgb(18_19_22/4%)] transition-[border-color] duration-150 focus-within:border-accent">
 				{target && (
 					<div className="flex items-center gap-2 border-b border-line py-1.5 pr-1.5 pl-3.5 text-xs">
 						<CornerDownRight size={13} strokeWidth={1.75} className="shrink-0 text-ink-3" aria-hidden />
 						<span className="shrink-0 text-ink-3">Replying to</span>
-						<span className="min-w-0 flex-1 truncate font-medium text-ink-2">{promptOf(target)}</span>
-						{open.length > 1 ? (
+						<span className="min-w-0 flex-1 font-medium text-ink-2">{choosing ? "Quick question" : "Question"}</span>
+						{open.length > 1 && !unavailable ? (
 							<span className="flex shrink-0 items-center text-ink-3 tabular-nums">
-								<IconButton label="Previous question" className="size-6" onClick={() => step(-1)}>
+								<IconButton label="Previous question" disabled={saving} className="size-6" onClick={() => step(-1)}>
 									<ChevronLeft size={14} strokeWidth={1.75} aria-hidden />
 								</IconButton>
 								{position + 1} of {open.length}
-								<IconButton label="Next question" className="size-6" onClick={() => step(1)}>
+								<IconButton label="Next question" disabled={saving} className="size-6" onClick={() => step(1)}>
 									<ChevronRight size={14} strokeWidth={1.75} aria-hidden />
 								</IconButton>
 							</span>
@@ -166,9 +192,45 @@ function Composer({ open, target, onPick, onAnswer }: ComposerProps) {
 						)}
 					</div>
 				)}
+				{target && (
+					<section
+						key={key}
+						aria-label="Selected question context"
+						// biome-ignore lint/a11y/noNoninteractiveTabindex: long question context needs keyboard scrolling
+						tabIndex={0}
+						className="max-h-[24vh] overflow-y-auto border-b border-line px-3.5 py-3"
+					>
+						{target.about && (
+							<p className="mb-1.5 flex items-start gap-1.5 text-xs text-ink-3">
+								<Briefcase size={12} className="mt-0.5 shrink-0" aria-hidden />
+								<span>{target.about.label}</span>
+							</p>
+						)}
+						<p className="selectable font-medium whitespace-pre-wrap wrap-anywhere">
+							{choosing ? ASKING[target.category ?? "none"] : promptOf(target)}
+						</p>
+						{target.why && (
+							<p className="selectable mt-1 text-xs text-ink-2 whitespace-pre-wrap wrap-anywhere">{target.why}</p>
+						)}
+					</section>
+				)}
+				{unavailable && (
+					<div className="px-3.5 py-3">
+						<p role="status" className="mb-2 text-xs text-ink-2">
+							This question was answered elsewhere or is no longer available.
+							{draft
+								? " Your draft is kept below; copy it if you need it before continuing."
+								: " Choose another question to continue."}
+						</p>
+						<Button size="sm" onClick={onContinue}>
+							Continue to next question
+						</Button>
+					</div>
+				)}
+
 				{target && choosing ? (
 					<div className="px-3.5 pt-3 pb-3">
-						<HaveChoice question={target} disabled={saving} onChoose={(have) => void send({ have })} />
+						<HaveChoice question={target} disabled={saving || unavailable} onChoose={(have) => void send({ have })} />
 						<p className={`mt-2.5 text-xs ${error ? "text-danger" : "text-ink-3"}`} role={error ? "alert" : undefined}>
 							{error ?? "One click answers it. Your answer is saved, so it is asked once."}
 						</p>
@@ -176,12 +238,13 @@ function Composer({ open, target, onPick, onAnswer }: ComposerProps) {
 				) : (
 					<>
 						<Textarea
-							key={target?.id ?? "none"}
+							key={key || "none"}
 							rows={2}
 							autoResize
 							disabled={!target}
+							readOnly={saving || unavailable}
 							value={draft}
-							onValueChange={(value) => setDraft(value)}
+							onValueChange={(value) => setDrafts((current) => ({ ...current, [key]: value }))}
 							submitShortcut="mod+enter"
 							placeholder={target ? "Your answer" : "Nothing to answer right now"}
 							aria-label={target ? promptOf(target) : "Your answer"}
@@ -196,7 +259,7 @@ function Composer({ open, target, onPick, onAnswer }: ComposerProps) {
 								<button
 									type="submit"
 									aria-label="Send answer"
-									disabled={!target || !draft.trim() || saving}
+									disabled={!target || !draft.trim() || saving || unavailable}
 									className="pressable flex size-8 shrink-0 items-center justify-center rounded-full bg-solid text-on-solid hover:bg-solid-hover disabled:bg-fill-press disabled:text-ink-4"
 								>
 									<ArrowUp size={16} strokeWidth={2} aria-hidden />
@@ -218,23 +281,38 @@ type Props = {
 
 export function QuestionsPage({ history, open: waiting, onAnswer }: Props) {
 	const agent = useAgentState();
-	const [targetId, setTargetId] = useState<string | null>(null);
-	const scroller = useRef<HTMLDivElement>(null);
-	// Quick questions come first, so the one-click answers are out of the way before anything needs typing.
-	const open = [...waiting.filter(awaitingChoice), ...waiting.filter((question) => !awaitingChoice(question))];
-	const target = open.find((question) => question.id === targetId) ?? open[0];
+	const [selected, setSelected] = useState<OpenQuestion | null>(null);
+	const [answered, setAnswered] = useState<Set<string>>(() => new Set());
+	const [saving, setSaving] = useState(false);
+	const scroll = useQuestionScroll();
+	const formRef = useRef<HTMLFormElement>(null);
+	const focusRequested = useRef(false);
+	const pick = (question: OpenQuestion | null) => {
+		focusRequested.current = true;
+		setSelected(question);
+	};
+	const open = questionQueue(waiting.filter((question) => !answered.has(questionKey(question))));
+	const current = selected && open.find((question) => questionKey(question) === questionKey(selected));
+	const target = current ?? selected ?? undefined;
+	const unavailable = Boolean(selected && !current && !saving);
+	useLayoutEffect(() => {
+		if (!selected && open[0]) setSelected(open[0]);
+		const pending = new Set(waiting.map(questionKey));
+		if ([...answered].some((key) => !pending.has(key))) {
+			setAnswered(new Set([...answered].filter((key) => pending.has(key))));
+		}
+		if (selected && focusRequested.current) {
+			formRef.current?.querySelector<HTMLElement>("textarea, fieldset button")?.focus({ preventScroll: true });
+			focusRequested.current = false;
+		}
+	}, [selected, open, answered, waiting]);
+
 	const answer = async (question: OpenQuestion, reply: QuestionReply) => {
 		await onAnswer(question, reply);
-		// After a click, move on to the next quick question.
-		if (typeof reply !== "string") setTargetId(null);
+		setAnswered((current) => new Set(current).add(questionKey(question)));
+		setSelected(null);
 	};
 	const usingAnswers = agent.status === "running" && agent.runLabel === "Using your answers";
-
-	// biome-ignore lint/correctness/useExhaustiveDependencies: keep the newest message in view as the thread grows
-	useEffect(() => {
-		const element = scroller.current;
-		if (element) element.scrollTop = element.scrollHeight;
-	}, [history, usingAnswers]);
 
 	return (
 		<section id="agent-panel" aria-label="Questions" className="flex min-h-0 flex-1 flex-col">
@@ -244,39 +322,72 @@ export function QuestionsPage({ history, open: waiting, onAnswer }: Props) {
 				)}
 			</PageHeader>
 
-			<div ref={scroller} className="scroll-quiet min-h-0 flex-1 overflow-y-auto">
-				{history.length === 0 ? (
-					<div className="flex h-full flex-col items-center justify-center px-6 text-center">
-						<Avatar />
-						<h2 className="mt-3 text-sm font-semibold">No questions yet</h2>
-						<p className="mt-1 max-w-[44ch] text-ink-3">
-							When the agent needs something only you know, it asks here. Your answers are saved to what it knows about
-							you, so each one is asked once.
-						</p>
-					</div>
-				) : (
-					<ol className="mx-auto flex w-full max-w-[720px] flex-col gap-4 px-6 pt-6 pb-4">
-						<li className="pb-1 text-center text-xs text-ink-3">
-							The agent asks here when it needs something only you know. Each answer is saved, so it is asked once.
-						</li>
-						{history.flatMap((question) => {
-							const ask = (
-								<AgentMessage
-									key={`q-${question.id}`}
-									question={question}
-									replying={question.id === target?.id}
-									canPick={open.length > 1}
-									onPick={() => setTargetId(question.id)}
-								/>
-							);
-							return question.answer ? [ask, <UserMessage key={`a-${question.id}`} question={question} />] : [ask];
-						})}
-						{usingAnswers && <Working label="Carrying on with your answers" />}
-					</ol>
+			<section
+				ref={scroll.scroller}
+				onScroll={scroll.onScroll}
+				aria-label="Question history"
+				// biome-ignore lint/a11y/noNoninteractiveTabindex: history needs keyboard scrolling
+				tabIndex={0}
+				className="scroll-quiet min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]"
+			>
+				<div ref={scroll.content} className="flex min-h-full flex-col">
+					{history.length === 0 ? (
+						<div className="flex flex-1 flex-col items-center justify-center px-6 py-6 text-center">
+							<Avatar />
+							<h2 className="mt-3 text-sm font-semibold">No questions yet</h2>
+							<p className="mt-1 max-w-[44ch] text-ink-3">
+								When the agent needs something only you know, it asks here. Your answers are saved to what it knows
+								about you, so each one is asked once.
+							</p>
+						</div>
+					) : (
+						<ol className="mx-auto flex w-full max-w-[720px] flex-col gap-4 px-6 pt-6 pb-4">
+							<li className="pb-1 text-center text-xs text-ink-3">
+								The agent asks here when it needs something only you know. Each answer is saved, so it is asked once.
+							</li>
+							{history.flatMap((question) => {
+								const ask = (
+									<AgentMessage
+										key={`q-${questionKey(question)}`}
+										question={question}
+										replying={Boolean(target && questionKey(question) === questionKey(target))}
+										canPick={!saving && open.length > 0}
+										onPick={() => pick(question)}
+									/>
+								);
+								return question.answer
+									? [ask, <UserMessage key={`a-${questionKey(question)}`} question={question} />]
+									: [ask];
+							})}
+							{usingAnswers && <Working label="Carrying on with your answers" />}
+						</ol>
+					)}
+				</div>
+			</section>
+
+			<div className="flex h-10 shrink-0 items-center justify-center">
+				{scroll.away && (
+					<button
+						type="button"
+						aria-label="Jump to latest"
+						title="Jump to latest"
+						onClick={scroll.toBottom}
+						className="pressable flex size-8 items-center justify-center rounded-full border border-line-strong bg-surface text-ink-2 hover:bg-fill-hover"
+					>
+						<ArrowDown size={16} aria-hidden />
+					</button>
 				)}
 			</div>
-
-			<Composer open={open} target={target} onPick={setTargetId} onAnswer={answer} />
+			<Composer
+				formRef={formRef}
+				open={open}
+				target={target}
+				unavailable={unavailable}
+				onContinue={() => pick(null)}
+				onPick={pick}
+				onAnswer={answer}
+				onSaving={setSaving}
+			/>
 		</section>
 	);
 }
