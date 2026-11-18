@@ -1,7 +1,16 @@
 import { awaitingChoice, type QuestionReply } from "@shared/application";
 import { Textarea } from "@ui-sdk/react/textarea";
-import { ArrowUp, Bot, Briefcase, CheckCheck, ChevronLeft, ChevronRight, CornerDownRight } from "lucide-react";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import {
+	ArrowDown,
+	ArrowUp,
+	Bot,
+	Briefcase,
+	CheckCheck,
+	ChevronLeft,
+	ChevronRight,
+	CornerDownRight,
+} from "lucide-react";
+import { type FormEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAgentState } from "../lib/agent";
 import { relativeTime } from "../lib/format";
 import type { OpenQuestion } from "../lib/questions";
@@ -112,22 +121,25 @@ type ComposerProps = {
 };
 
 function Composer({ open, target, onPick, onAnswer }: ComposerProps) {
-	const [draft, setDraft] = useState("");
+	// What has been typed stays with its question, so looking at another one loses nothing.
+	const [drafts, setDrafts] = useState<Record<string, string>>({});
+	const draft = target ? (drafts[target.id] ?? "") : "";
 	const [saving, setSaving] = useState(false);
-	const [error, setError] = useState<string | null>(null);
+	const [failed, setFailed] = useState<{ id: string; message: string } | null>(null);
+	const error = failed && failed.id === target?.id ? failed.message : null;
 	const position = target ? open.indexOf(target) : 0;
 	// A quick question is answered with a click, and only with a click.
 	const choosing = Boolean(target && awaitingChoice(target));
 
 	const send = async (reply: QuestionReply) => {
-		if (!target) return;
+		if (!target || saving) return;
 		setSaving(true);
-		setError(null);
+		setFailed(null);
 		try {
 			await onAnswer(target, reply);
-			setDraft("");
+			setDrafts(({ [target.id]: _sent, ...rest }) => rest);
 		} catch (cause) {
-			setError(`That did not send: ${(cause as Error).message}`);
+			setFailed({ id: target.id, message: `That did not send: ${(cause as Error).message}` });
 		} finally {
 			setSaving(false);
 		}
@@ -140,17 +152,19 @@ function Composer({ open, target, onPick, onAnswer }: ComposerProps) {
 
 	const step = (by: number) => {
 		onPick(open[(position + by + open.length) % open.length].id);
-		setDraft("");
 	};
 
 	return (
 		<form onSubmit={submit} className="mx-auto w-full max-w-[720px] shrink-0 px-6 pb-5">
 			<div className="rounded-2xl border border-line-strong bg-surface shadow-[0_1px_2px_rgb(18_19_22/4%)] transition-[border-color] duration-150 focus-within:border-accent">
 				{target && (
-					<div className="flex items-center gap-2 border-b border-line py-1.5 pr-1.5 pl-3.5 text-xs">
-						<CornerDownRight size={13} strokeWidth={1.75} className="shrink-0 text-ink-3" aria-hidden />
-						<span className="shrink-0 text-ink-3">Replying to</span>
-						<span className="min-w-0 flex-1 truncate font-medium text-ink-2">{promptOf(target)}</span>
+					<div className="flex items-start gap-2 border-b border-line py-1.5 pr-1.5 pl-3.5 text-xs leading-[18px]">
+						<CornerDownRight size={13} strokeWidth={1.75} className="mt-[5.5px] shrink-0 text-ink-3" aria-hidden />
+						<span className="shrink-0 py-[3px] text-ink-3">Replying to</span>
+						{/* A long question keeps to three lines here; the whole of it is in the thread. */}
+						<span className="min-w-0 flex-1 py-[3px] font-medium text-ink-2">
+							<span className="line-clamp-3 text-pretty">{promptOf(target)}</span>
+						</span>
 						{open.length > 1 ? (
 							<span className="flex shrink-0 items-center text-ink-3 tabular-nums">
 								<IconButton label="Previous question" className="size-6" onClick={() => step(-1)}>
@@ -180,8 +194,9 @@ function Composer({ open, target, onPick, onAnswer }: ComposerProps) {
 							rows={2}
 							autoResize
 							disabled={!target}
+							readOnly={saving}
 							value={draft}
-							onValueChange={(value) => setDraft(value)}
+							onValueChange={(value) => target && setDrafts((current) => ({ ...current, [target.id]: value }))}
 							submitShortcut="mod+enter"
 							placeholder={target ? "Your answer" : "Nothing to answer right now"}
 							aria-label={target ? promptOf(target) : "Your answer"}
@@ -220,21 +235,44 @@ export function QuestionsPage({ history, open: waiting, onAnswer }: Props) {
 	const agent = useAgentState();
 	const [targetId, setTargetId] = useState<string | null>(null);
 	const scroller = useRef<HTMLDivElement>(null);
+	// Whether the newest message is in view. Only then does the thread follow what arrives.
+	const following = useRef(true);
+	const [away, setAway] = useState(false);
 	// Quick questions come first, so the one-click answers are out of the way before anything needs typing.
 	const open = [...waiting.filter(awaitingChoice), ...waiting.filter((question) => !awaitingChoice(question))];
 	const target = open.find((question) => question.id === targetId) ?? open[0];
-	const answer = async (question: OpenQuestion, reply: QuestionReply) => {
-		await onAnswer(question, reply);
-		// After a click, move on to the next quick question.
-		if (typeof reply !== "string") setTargetId(null);
-	};
+	// The question being answered stays the one being answered when others arrive. The next one is
+	// taken up only once this one is answered.
+	if (target && target.id !== targetId) setTargetId(target.id);
 	const usingAnswers = agent.status === "running" && agent.runLabel === "Using your answers";
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: keep the newest message in view as the thread grows
-	useEffect(() => {
+	const toLatest = () => {
 		const element = scroller.current;
 		if (element) element.scrollTop = element.scrollHeight;
+	};
+
+	const onScroll = () => {
+		const element = scroller.current;
+		if (!element) return;
+		following.current = element.scrollHeight - element.clientHeight - element.scrollTop < 48;
+		setAway(!following.current);
+	};
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: runs when the thread changes, and reads the scroll position then
+	useLayoutEffect(() => {
+		if (following.current) toLatest();
 	}, [history, usingAnswers]);
+
+	// The composer grows and shrinks, and takes the room from the thread.
+	useEffect(() => {
+		const element = scroller.current;
+		if (!element) return;
+		const observer = new ResizeObserver(() => {
+			if (following.current) element.scrollTop = element.scrollHeight;
+		});
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, []);
 
 	return (
 		<section id="agent-panel" aria-label="Questions" className="flex min-h-0 flex-1 flex-col">
@@ -244,39 +282,52 @@ export function QuestionsPage({ history, open: waiting, onAnswer }: Props) {
 				)}
 			</PageHeader>
 
-			<div ref={scroller} className="scroll-quiet min-h-0 flex-1 overflow-y-auto">
-				{history.length === 0 ? (
-					<div className="flex h-full flex-col items-center justify-center px-6 text-center">
-						<Avatar />
-						<h2 className="mt-3 text-sm font-semibold">No questions yet</h2>
-						<p className="mt-1 max-w-[44ch] text-ink-3">
-							When the agent needs something only you know, it asks here. Your answers are saved to what it knows about
-							you, so each one is asked once.
-						</p>
-					</div>
-				) : (
-					<ol className="mx-auto flex w-full max-w-[720px] flex-col gap-4 px-6 pt-6 pb-4">
-						<li className="pb-1 text-center text-xs text-ink-3">
-							The agent asks here when it needs something only you know. Each answer is saved, so it is asked once.
-						</li>
-						{history.flatMap((question) => {
-							const ask = (
-								<AgentMessage
-									key={`q-${question.id}`}
-									question={question}
-									replying={question.id === target?.id}
-									canPick={open.length > 1}
-									onPick={() => setTargetId(question.id)}
-								/>
-							);
-							return question.answer ? [ask, <UserMessage key={`a-${question.id}`} question={question} />] : [ask];
-						})}
-						{usingAnswers && <Working label="Carrying on with your answers" />}
-					</ol>
+			<div className="relative flex min-h-0 flex-1 flex-col">
+				<div ref={scroller} onScroll={onScroll} className="scroll-quiet min-h-0 flex-1 overflow-y-auto">
+					{history.length === 0 ? (
+						<div className="flex h-full flex-col items-center justify-center px-6 text-center">
+							<Avatar />
+							<h2 className="mt-3 text-sm font-semibold">No questions yet</h2>
+							<p className="mt-1 max-w-[44ch] text-ink-3">
+								When the agent needs something only you know, it asks here. Your answers are saved to what it knows
+								about you, so each one is asked once.
+							</p>
+						</div>
+					) : (
+						<ol className="mx-auto flex w-full max-w-[720px] flex-col gap-4 px-6 pt-6 pb-4">
+							<li className="pb-1 text-center text-xs text-ink-3">
+								The agent asks here when it needs something only you know. Each answer is saved, so it is asked once.
+							</li>
+							{history.flatMap((question) => {
+								const ask = (
+									<AgentMessage
+										key={`q-${question.id}`}
+										question={question}
+										replying={question.id === target?.id}
+										canPick={open.length > 1}
+										onPick={() => setTargetId(question.id)}
+									/>
+								);
+								return question.answer ? [ask, <UserMessage key={`a-${question.id}`} question={question} />] : [ask];
+							})}
+							{usingAnswers && <Working label="Carrying on with your answers" />}
+						</ol>
+					)}
+				</div>
+				{away && (
+					<button
+						type="button"
+						aria-label="Jump to the latest"
+						title="Jump to the latest"
+						onClick={toLatest}
+						className="pressable absolute bottom-2 left-1/2 flex size-8 -translate-x-1/2 items-center justify-center rounded-full border border-line-strong bg-surface text-ink-2 shadow-[0_1px_2px_rgb(18_19_22/8%)] transition-[opacity] duration-150 hover:bg-fill-hover hover:text-ink starting:opacity-0 motion-reduce:transition-none"
+					>
+						<ArrowDown size={15} strokeWidth={1.75} aria-hidden />
+					</button>
 				)}
 			</div>
 
-			<Composer open={open} target={target} onPick={setTargetId} onAnswer={answer} />
+			<Composer open={open} target={target} onPick={setTargetId} onAnswer={onAnswer} />
 		</section>
 	);
 }

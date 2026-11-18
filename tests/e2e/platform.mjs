@@ -239,6 +239,104 @@ try {
 		elsewhere.answer,
 	);
 	await shot(window, `platform-${process.platform}-answered`);
+
+	// A long thread: reading it, and typing an answer, are not disturbed by what arrives meanwhile.
+	const inboxFile = path.join(sandbox.workspace, "inbox.json");
+	const minute = (n) => new Date(Date.UTC(2026, 10, 15, 10, n)).toISOString();
+	const ask = (id, n, question = `Question ${id}: what should the agent know?`) => ({
+		id,
+		question,
+		askedAt: minute(n),
+	});
+	const longQuestion = `${"Which of the notice periods and start dates in your last three roles should the form give? ".repeat(5)}Say which.`;
+	let inbox = [
+		...Array.from({ length: 24 }, (_, n) => ({
+			...ask(`old-${n}`, n),
+			answer: `Saved answer ${n}`,
+			answeredAt: minute(n),
+		})),
+		ask("t1", 30, longQuestion),
+		ask("t2", 31),
+	];
+	const writeInbox = async () => {
+		await fs.writeFile(inboxFile, JSON.stringify(inbox));
+		await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send("inbox:changed"));
+		await window.waitForTimeout(300);
+	};
+	await writeInbox();
+	const thread = window.locator("#agent-panel ol").locator("xpath=..");
+	const replyingTo = window
+		.locator("#agent-panel form")
+		.getByText("Replying to")
+		.locator("xpath=following-sibling::span[1]");
+	await answerBox.waitFor({ timeout: 10_000 });
+	check(
+		"a long question shows on more than one line above the answer",
+		(await replyingTo.evaluate((el) => el.getBoundingClientRect().height)) > 40,
+	);
+	await shot(window, `platform-${process.platform}-long-question`);
+	// Where a message sits in the thread's window: the first one in view, or the one with this text.
+	const messageInView = (text) =>
+		thread.evaluate((el, text) => {
+			const top = el.getBoundingClientRect().top;
+			const items = [...el.querySelectorAll("li")];
+			const item = text
+				? items.find((li) => li.textContent === text)
+				: items.find((li) => li.getBoundingClientRect().top > top + 40);
+			return { text: item.textContent, offset: item.getBoundingClientRect().top - top };
+		}, text);
+	await thread.evaluate((el) => {
+		el.scrollTop = el.scrollHeight * 0.5;
+	});
+	await window.waitForTimeout(200);
+	const reading = await messageInView();
+	await writeInbox();
+	check(
+		"a refresh does not move a thread being read",
+		Math.abs((await messageInView(reading.text)).offset - reading.offset) < 2,
+	);
+	inbox[1].answer = "A much longer answer than before. ".repeat(30);
+	inbox[2].deliveredAt = minute(40);
+	inbox.push(ask("t3", 41));
+	await writeInbox();
+	const afterChanges = await messageInView(reading.text);
+	check(
+		"answers growing above and questions arriving below leave the reader on the same message",
+		Math.abs(afterChanges.offset - reading.offset) < 2,
+		`${reading.offset} -> ${afterChanges.offset}`,
+	);
+	const jump = window.getByRole("button", { name: "Jump to the latest" });
+	check("away from the end, a button offers the latest", await jump.isVisible());
+	await shot(window, `platform-${process.platform}-thread-reading`);
+	await jump.click();
+	await jump.waitFor({ state: "detached" });
+	inbox.push(ask("t4", 42));
+	await writeInbox();
+	check(
+		"at the end, the thread follows what arrives",
+		await thread.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop < 2),
+	);
+
+	await answerBox.fill("Half an answer to the long question");
+	inbox.push({ ...ask("k1", 43, "Do you have this: Tableau?"), item: "Tableau", category: "skills" });
+	await writeInbox();
+	check(
+		"a quick question that arrives does not take over from the answer being typed",
+		(await answerBox.inputValue()) === "Half an answer to the long question" &&
+			(await answerBox.getAttribute("aria-label")) === longQuestion,
+	);
+	await window.getByRole("button", { name: "Previous question" }).click();
+	await choice.getByText("Tableau", { exact: true }).waitFor();
+	await window.getByRole("button", { name: "Next question" }).click();
+	check(
+		"a draft is still there after looking at another question",
+		(await answerBox.inputValue()) === "Half an answer to the long question",
+	);
+	await window.getByRole("button", { name: "Next question" }).click();
+	check("each question has its own draft", (await answerBox.inputValue()) === "");
+	inbox = [];
+	await writeInbox();
+
 	const withOneMore = JSON.parse(await fs.readFile(path.join(folder, "application.json"), "utf8"));
 	withOneMore.questions.push(quick("q5", "SAP", "skills"));
 	await fs.writeFile(path.join(folder, "application.json"), JSON.stringify(withOneMore));
