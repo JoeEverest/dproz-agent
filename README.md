@@ -153,7 +153,7 @@ npm run lint
 npm test                              # unit tests
 npm run build
 node tests/e2e/run.mjs platform       # setup, board, questions, drawer, master resume editor, settings, vault (no agent run)
-node tests/e2e/run.mjs reassess       # which cards offer Reassess, the note, the queued run and its history entry (no model needed)
+node tests/e2e/run.mjs reassess       # which cards offer Reassess, the note and the one queued run (agent paused, no run)
 node tests/e2e/run.mjs gallery        # screenshots of every screen, light and dark, with demo cards
 node tests/e2e/run.mjs full           # the whole autonomous flow against a local mock jobs feed and careers portal
 node tests/e2e/run.mjs edits          # you edit your master resume, and the agent prepares again the unsent application that relied on it

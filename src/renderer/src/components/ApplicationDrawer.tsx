@@ -289,7 +289,7 @@ function ReassessForm({ application, onCancel, onSent }: ReassessFormProps) {
 			<p className="font-medium">Reassess this job</p>
 			<p className="mt-0.5 text-xs text-ink-2">
 				The agent reads the posting again and decides with your profile, your answers and anything you add here. What
-				you write applies to this job only.
+				you write applies to this job only. Preparing it again takes a few minutes.
 			</p>
 			<Textarea
 				className="mt-2 max-h-40"

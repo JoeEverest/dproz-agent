@@ -313,18 +313,24 @@ class AgentManager {
 		// Running from here, so nothing else starts while the request is checked.
 		this.status = "running";
 		this.current = request;
+		this.abort = new AbortController();
 		if (request.start) {
-			try {
-				await request.start();
-			} catch (error) {
+			const refused = await request.start().then(
+				() => undefined,
+				(error: Error) => error.message,
+			);
+			// Refused, or paused while it was being checked: either way nothing runs now.
+			if (refused || this.abort.signal.aborted) {
+				this.abort = null;
 				this.status = "idle";
 				this.current = null;
-				this.notice("info", (error as Error).message);
+				if (refused) this.notice("info", refused);
+				// Checked and noted already, so it waits for the resume as it is.
+				else this.queue.unshift({ ...request, start: undefined });
 				return this.next();
 			}
 		}
 		this.runLabel = request.label;
-		this.abort = new AbortController();
 		this.publishState();
 		this.notice("info", `${request.label}.`);
 		const startedAt = stamp();

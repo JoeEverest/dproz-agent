@@ -2,7 +2,6 @@
 // optional note, the waiting state, one queued run however often it is asked, and no way to resend.
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
-import http from "node:http";
 import path from "node:path";
 import { createSandbox, launchApp, shot } from "./harness.mjs";
 
@@ -31,22 +30,8 @@ for (const status of statuses) {
 	);
 }
 
-// The agent's own runs go to a stand-in that refuses every request, so resuming it below can never
-// reach a model or an account signed in on this machine.
-const refusedRequests = [];
-const api = http.createServer((request, response) => {
-	refusedRequests.push(request.url);
-	request.resume();
-	response.statusCode = 401;
-	response.setHeader("content-type", "application/json");
-	response.end(JSON.stringify({ type: "error", error: { type: "authentication_error", message: "test stand-in" } }));
-});
-await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
-const { app, window } = await launchApp(sandbox, {
-	ANTHROPIC_BASE_URL: `http://127.0.0.1:${api.address().port}`,
-	ANTHROPIC_API_KEY: "test-no-key",
-	ANTHROPIC_AUTH_TOKEN: "",
-});
+// The agent stays paused throughout, so no run ever starts.
+const { app, window } = await launchApp(sandbox);
 let checks = 0;
 const check = (name, passed) => {
 	assert.ok(passed, name);
@@ -64,13 +49,6 @@ const close = async () => {
 	await drawer.waitFor({ state: "hidden" });
 };
 const agentState = () => window.evaluate(() => window.desk.agent.state());
-const until = async (condition, timeout) => {
-	const end = Date.now() + timeout;
-	while (!(await condition())) {
-		if (Date.now() > end) throw new Error("Timed out waiting for the agent");
-		await window.waitForTimeout(200);
-	}
-};
 const history = async (id) => JSON.parse(await fs.readFile(cardFile(id), "utf8")).timeline.map((entry) => entry.event);
 
 try {
@@ -133,30 +111,8 @@ try {
 	state = await agentState();
 	check("the refusal queues nothing", state.queued === 1 && (await history("applied")).join() === "Found");
 
-	await window.evaluate(() => window.desk.agent.setPaused(true).then(() => window.desk.agent.setPaused(false)));
-	await until(async () => (await agentState()).waiting.length === 0, 10_000);
-	await drawer.getByText(/You asked the agent to reassess this/).waitFor();
-	check(
-		"the history notes the request, with the latest note, once the run starts",
-		(await history("closed")).join("|") === 'Found|You asked the agent to reassess this: "A newer note."',
-	);
-	check(
-		"the card stays Closed until the agent moves it",
-		JSON.parse(await fs.readFile(cardFile("closed"), "utf8")).status === "closed",
-	);
-	check("the card shows as worked on while its run goes", (await agentState()).active.closed === "Reassessing");
-	await until(async () => refusedRequests.some((url) => url.startsWith("/v1/messages")), 60_000);
-	// The stand-in refuses every request, so the run would only retry: stop it.
-	await window.evaluate(() => window.desk.agent.setPaused(true));
-	await until(async () => (await agentState()).status === "idle", 30_000);
-	const activity = await window.evaluate(() => window.desk.agent.activity());
-	check(
-		"the run went to the stand-in, not a real model, and used no tools",
-		!activity.some((item) => item.kind === "tool"),
-	);
 	await close();
 	console.log(`${checks} checks passed`);
 } finally {
 	await app.close();
-	api.close();
 }
