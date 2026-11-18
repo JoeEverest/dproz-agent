@@ -156,6 +156,8 @@ export type DeskApi = {
 		list(): Promise<WorkspaceDocument[]>;
 		add(paths: string[]): Promise<WorkspaceDocument[]>;
 		pick(): Promise<WorkspaceDocument[]>;
+		/** Lets the user choose files without adding them yet: they are added when an answer is sent. */
+		choose(): Promise<string[]>;
 		remove(name: string): Promise<WorkspaceDocument[]>;
 		/** Saves a copy where the user chooses. Returns where it went, or null if they cancelled. */
 		save(name: string): Promise<string | null>;
@@ -172,7 +174,8 @@ export type DeskApi = {
 	applications: {
 		list(): Promise<Application[]>;
 		setStatus(id: string, status: ApplicationStatus): Promise<Application>;
-		answer(id: string, questionId: string, reply: QuestionReply): Promise<Application>;
+		/** `files` are paths to copy into documents/ and name on the answer. */
+		answer(id: string, questionId: string, reply: QuestionReply, files?: string[]): Promise<Application>;
 		/** Asks the agent to look at this job again, with what changed if the user said. */
 		reassess(id: string, note?: string): Promise<void>;
 		remove(id: string): Promise<void>;
@@ -185,7 +188,7 @@ export type DeskApi = {
 	};
 	inbox: {
 		list(): Promise<InboxQuestion[]>;
-		answer(questionId: string, reply: QuestionReply): Promise<InboxQuestion[]>;
+		answer(questionId: string, reply: QuestionReply, files?: string[]): Promise<InboxQuestion[]>;
 	};
 	credentials: {
 		list(): Promise<CredentialSummary[]>;
@@ -237,7 +240,7 @@ type RemoteAreas = Exclude<keyof DeskApi, "on">;
 export const DESK_METHODS = {
 	settings: ["get", "update"],
 	setup: ["status", "installBrowser", "chooseWorkspace"],
-	documents: ["list", "add", "pick", "remove", "save", "links", "addLink", "removeLink"],
+	documents: ["list", "add", "pick", "choose", "remove", "save", "links", "addLink", "removeLink"],
 	profile: ["read", "write"],
 	applications: [
 		"list",

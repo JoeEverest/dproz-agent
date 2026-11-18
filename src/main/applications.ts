@@ -6,6 +6,7 @@ import {
 	type Application,
 	type ApplicationStatus,
 	applicationSchema,
+	attachedAnswer,
 	haveAnswer,
 	type Question,
 	type QuestionReply,
@@ -17,7 +18,7 @@ import {
 import { z } from "zod";
 import { broadcast } from "./events";
 import { exists, readJson, writeJson } from "./files";
-import { ensureWorkspace, workspacePaths } from "./workspace";
+import { ensureWorkspace, forgetDocuments, importDocuments, workspacePaths } from "./workspace";
 
 export type NewQuestion = {
 	question?: string;
@@ -35,6 +36,7 @@ export type AnsweredQuestion = {
 	answer: string;
 	item?: string;
 	have?: boolean;
+	documents?: string[];
 };
 
 type StatusListener = (application: Application, previous: ApplicationStatus | null) => void;
@@ -201,16 +203,47 @@ const itemKey = (item: string) =>
 
 export const sameItem = (a?: string, b?: string) => Boolean(a && b) && itemKey(a ?? "") === itemKey(b ?? "");
 
-/** A question after the user replies: a click on a quick question, or the text of an answer to an open one. */
-export function applyReply(question: Question, reply: QuestionReply): Question {
+/**
+ * A question after the user replies: a click on a quick question, or the text of an answer to an open
+ * one, with the names of any documents they attached.
+ */
+export function applyReply(question: Question, reply: QuestionReply, documents: string[] = []): Question {
 	const settled = (fields: Partial<Question>) => ({
 		...question,
 		...fields,
+		documents: documents.length ? documents : undefined,
 		answeredAt: now(),
 		deliveredAt: undefined,
 	});
 	if (typeof reply !== "string") return settled({ have: reply.have, answer: haveAnswer(reply.have) });
-	return settled({ answer: reply.trim() });
+	const text = reply.trim() || (documents.length ? attachedAnswer(documents) : "");
+	if (!text) throw new Error("An answer needs some text or a document.");
+	return settled({ answer: text });
+}
+
+/**
+ * Copies the files attached to an answer into documents/ and saves the answer naming them. If the
+ * answer is not saved, the copies are taken back, so neither is kept without the other.
+ */
+async function answering<T>(
+	questions: Question[],
+	questionId: string,
+	reply: QuestionReply,
+	files: string[],
+	save: (questions: Question[]) => Promise<T>,
+): Promise<T> {
+	if (files.length && !questions.some((question) => question.id === questionId)) {
+		throw new Error("That question is no longer waiting for an answer.");
+	}
+	const documents = await importDocuments(files);
+	try {
+		return await save(
+			questions.map((question) => (question.id === questionId ? applyReply(question, reply, documents) : question)),
+		);
+	} catch (error) {
+		await forgetDocuments(documents);
+		throw error;
+	}
 }
 
 /**
@@ -243,14 +276,18 @@ export function askApplicationQuestions(id: string, questions: NewQuestion[]): P
 	});
 }
 
-export function answerApplicationQuestion(id: string, questionId: string, reply: QuestionReply): Promise<Application> {
+export function answerApplicationQuestion(
+	id: string,
+	questionId: string,
+	reply: QuestionReply,
+	files: string[] = [],
+): Promise<Application> {
 	return serialized(async () => {
 		const current = await getApplication(id);
-		const questions = current.questions.map((question) =>
-			question.id === questionId ? applyReply(question, reply) : question,
+		const saved = await answering(current.questions, questionId, reply, files, (questions) =>
+			persist({ ...current, questions }, current.status),
 		);
-		const saved = await persist({ ...current, questions }, current.status);
-		const answered = questions.find((question) => question.id === questionId);
+		const answered = saved.questions.find((question) => question.id === questionId);
 		if (answered) await shareAnswer(answered);
 		return saved;
 	});
@@ -280,12 +317,16 @@ export function askInboxQuestions(questions: NewQuestion[]): Promise<Question[]>
 	return serialized(async () => saveInbox([...(await listInbox()), ...toQuestions(questions)]));
 }
 
-export function answerInboxQuestion(questionId: string, reply: QuestionReply): Promise<Question[]> {
+export function answerInboxQuestion(
+	questionId: string,
+	reply: QuestionReply,
+	files: string[] = [],
+): Promise<Question[]> {
 	return serialized(async () => {
-		const questions = (await listInbox()).map((question) =>
-			question.id === questionId ? applyReply(question, reply) : question,
-		);
-		await saveInbox(questions);
+		const questions = await answering(await listInbox(), questionId, reply, files, async (next) => {
+			await saveInbox(next);
+			return next;
+		});
 		const answered = questions.find((question) => question.id === questionId);
 		if (answered) await shareAnswer(answered);
 		return listInbox();
@@ -307,8 +348,8 @@ export function collectUndeliveredAnswers(): Promise<AnsweredQuestion[]> {
 		const answers: AnsweredQuestion[] = [];
 		const deliver = (question: Question, origin: Pick<AnsweredQuestion, "applicationId" | "application">) => {
 			if (!awaitingDelivery(question)) return question;
-			const { item, have } = question;
-			answers.push({ ...origin, question: question.question, answer: question.answer ?? "", item, have });
+			const { item, have, documents } = question;
+			answers.push({ ...origin, question: question.question, answer: question.answer ?? "", item, have, documents });
 			return { ...question, deliveredAt };
 		};
 

@@ -4,14 +4,18 @@ import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { APPLICATION_STATUSES, reassessable } from "../../src/shared/application";
 
-const state = vi.hoisted(() => ({ workspaceDir: "" }));
+const state = vi.hoisted(() => ({ workspaceDir: "", lastDocumentDirectory: undefined as string | undefined }));
 
 vi.mock("electron", () => ({ BrowserWindow: { getAllWindows: () => [] }, app: { getPath: () => state.workspaceDir } }));
-vi.mock("../../src/main/settings", () => ({ getSettings: async () => ({ workspaceDir: state.workspaceDir }) }));
+vi.mock("../../src/main/settings", () => ({
+	getSettings: async () => ({ workspaceDir: state.workspaceDir }),
+	updateSettings: async (patch: object) => Object.assign(state, patch),
+}));
 
 const store = await import("../../src/main/applications");
 
 beforeEach(async () => {
+	state.lastDocumentDirectory = undefined;
 	state.workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "dproz-agent-"));
 });
 
@@ -181,5 +185,68 @@ describe("asking the agent to reassess a job", () => {
 			"manual",
 			"closed",
 		]);
+	});
+});
+
+describe("documents attached to an answer", () => {
+	const attachment = async (name: string) => {
+		const folder = await fs.mkdtemp(path.join(os.tmpdir(), "dproz-attach-"));
+		const file = path.join(folder, name);
+		await fs.writeFile(file, `Synthetic ${name}`);
+		return file;
+	};
+	const documentsDir = () => path.join(state.workspaceDir, "documents");
+
+	it("copies the files into documents/ and gives their stored names to the agent with the answer", async () => {
+		await store.askInboxQuestions([{ item: "A CPA certificate", category: "certifications" }]);
+		const [question] = await store.listInbox();
+		await fs.mkdir(documentsDir(), { recursive: true });
+		await fs.writeFile(path.join(documentsDir(), "certificate.pdf"), "Already in the profile");
+
+		const file = await attachment("certificate.pdf");
+		await store.answerInboxQuestion(question.id, { have: true }, [file]);
+		expect(state.lastDocumentDirectory).toBe(path.dirname(file));
+		const [answered] = await store.listInbox();
+		expect(answered).toMatchObject({ have: true, answer: "I have it.", documents: ["certificate 2.pdf"] });
+		expect(await fs.readFile(path.join(documentsDir(), "certificate.pdf"), "utf8")).toBe("Already in the profile");
+		const [delivered] = await store.collectUndeliveredAnswers();
+		expect(delivered.documents).toEqual(["certificate 2.pdf"]);
+	});
+
+	it("records an answer made only of files as those files", async () => {
+		await store.askInboxQuestions([{ question: "Can you share your transcript?" }]);
+		const [question] = await store.listInbox();
+		await store.answerInboxQuestion(question.id, "  ", [await attachment("transcript.pdf")]);
+		const [answered] = await store.listInbox();
+		expect(answered.answer).toBe("Attached transcript.pdf.");
+		expect(answered.documents).toEqual(["transcript.pdf"]);
+	});
+
+	it("keeps neither the answer nor any copied file when a file cannot be read", async () => {
+		const { application } = await store.createApplication(job);
+		const asked = await store.askApplicationQuestions(application.id, [{ question: "Referee?" }]);
+		const missing = path.join(os.tmpdir(), "dproz-no-such-file.pdf");
+		await expect(
+			store.answerApplicationQuestion(application.id, asked.questions[0].id, "See attached", [
+				await attachment("reference.pdf"),
+				missing,
+			]),
+		).rejects.toThrow("dproz-no-such-file.pdf could not be read");
+		expect((await store.getApplication(application.id)).questions[0].answer).toBeUndefined();
+		expect(await fs.readdir(documentsDir())).toEqual([]);
+		expect(state.lastDocumentDirectory).toBeUndefined();
+	});
+
+	it("copies nothing when the question is no longer waiting", async () => {
+		await expect(store.answerInboxQuestion("gone", "Here", [await attachment("letter.pdf")])).rejects.toThrow(
+			"no longer waiting",
+		);
+		expect(await fs.readdir(documentsDir()).catch(() => [])).toEqual([]);
+	});
+
+	it("still needs text or a file", async () => {
+		await store.askInboxQuestions([{ question: "Start date?" }]);
+		const [question] = await store.listInbox();
+		await expect(store.answerInboxQuestion(question.id, " ")).rejects.toThrow("needs some text or a document");
 	});
 });

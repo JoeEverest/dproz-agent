@@ -70,6 +70,15 @@ async function documentPickerDirectory() {
 	return undefined;
 }
 
+async function chooseDocuments() {
+	const result = await dialog.showOpenDialog({
+		title: "Add documents",
+		defaultPath: await documentPickerDirectory(),
+		properties: ["openFile", "multiSelections"],
+	});
+	return result.canceled ? [] : result.filePaths;
+}
+
 const handlers: Handlers = {
 	settings: {
 		get: getSettings,
@@ -100,13 +109,10 @@ const handlers: Handlers = {
 		list: listDocuments,
 		add: addDocuments,
 		pick: async () => {
-			const result = await dialog.showOpenDialog({
-				title: "Add documents",
-				defaultPath: await documentPickerDirectory(),
-				properties: ["openFile", "multiSelections"],
-			});
-			return result.canceled ? listDocuments() : addDocuments(result.filePaths);
+			const chosen = await chooseDocuments();
+			return chosen.length ? addDocuments(chosen) : listDocuments();
 		},
+		choose: chooseDocuments,
 		remove: removeDocument,
 		save: async (name) => {
 			const { documents } = await workspacePaths();
@@ -131,8 +137,8 @@ const handlers: Handlers = {
 			userMoved(id);
 			return patchApplication(id, { status });
 		},
-		answer: async (id, questionId, answer) => {
-			const application = await answerApplicationQuestion(id, questionId, answer);
+		answer: async (id, questionId, answer, files) => {
+			const application = await answerApplicationQuestion(id, questionId, answer, files);
 			questionAnswered(application.questions.find((question) => question.id === questionId));
 			agent.answersArrived();
 			return application;
@@ -160,8 +166,8 @@ const handlers: Handlers = {
 	},
 	inbox: {
 		list: listInbox,
-		answer: async (questionId, answer) => {
-			const inbox = await answerInboxQuestion(questionId, answer);
+		answer: async (questionId, answer, files) => {
+			const inbox = await answerInboxQuestion(questionId, answer, files);
 			questionAnswered(inbox.find((question) => question.id === questionId));
 			agent.answersArrived();
 			return inbox;

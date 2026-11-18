@@ -334,6 +334,79 @@ try {
 	);
 	await window.getByRole("button", { name: "Next question" }).click();
 	check("each question has its own draft", (await answerBox.inputValue()) === "");
+
+	// A document goes with an answer: it waits with its question and is added when the answer is sent.
+	const proof = path.join(sandbox.base, "proof");
+	await fs.mkdir(proof, { recursive: true });
+	await fs.writeFile(path.join(proof, "Tableau certificate.pdf"), "%PDF-1.4 certificate");
+	const pickFiles = (files) =>
+		app.evaluate(({ dialog }, files) => {
+			globalThis.realOpenDialog ??= dialog.showOpenDialog;
+			dialog.showOpenDialog = async () => ({ canceled: files.length === 0, filePaths: files });
+		}, files);
+	const composer = window.locator("#agent-panel form");
+	const attachButton = composer.getByRole("button", { name: "Attach a document" });
+	const waitingFiles = composer.getByRole("list", { name: "Attached documents" });
+	const storedDocuments = () => fs.readdir(path.join(sandbox.workspace, "documents")).catch(() => []);
+	const documentsBefore = await storedDocuments();
+	const savedInbox = async () => JSON.parse(await fs.readFile(inboxFile, "utf8"));
+	await pickFiles([path.join(proof, "Tableau certificate.pdf")]);
+	await attachButton.click();
+	await waitingFiles.getByText("Tableau certificate.pdf", { exact: true }).waitFor();
+	check(
+		"an attached document waits beside the answer, and is not added yet",
+		(await storedDocuments()).length === documentsBefore.length,
+	);
+	await window.getByRole("button", { name: "Previous question" }).click();
+	check("it stays with the question it was attached for", (await waitingFiles.count()) === 0);
+	await window.getByRole("button", { name: "Next question" }).click();
+	await waitingFiles.getByRole("button", { name: "Remove Tableau certificate.pdf" }).click();
+	check("it can be taken off before sending", (await waitingFiles.count()) === 0);
+	await attachButton.click();
+	await waitingFiles.getByText("Tableau certificate.pdf", { exact: true }).waitFor();
+	await composer.getByRole("button", { name: "Send answer" }).click();
+	await thread
+		.getByRole("list", { name: "Attached documents" })
+		.getByText("Tableau certificate.pdf", { exact: true })
+		.waitFor();
+	const withFile = (await savedInbox()).find((question) => question.id === "t2");
+	check(
+		"an answer can be a document alone: it is added to the documents and named on the answer",
+		withFile.documents?.join() === "Tableau certificate.pdf" &&
+			(await storedDocuments()).includes("Tableau certificate.pdf"),
+		JSON.stringify(withFile),
+	);
+	await choice.getByText("Tableau", { exact: true }).waitFor();
+	await attachButton.click();
+	await composer.getByText("Choose an answer to send it with what you attached.").waitFor();
+	await shot(window, `platform-${process.platform}-answer-attachment`);
+	await choice.getByRole("button", { name: /^I have it/ }).click();
+	await answerBox.waitFor({ timeout: 10_000 });
+	const quickWithFile = (await savedInbox()).find((question) => question.id === "k1");
+	check(
+		"a quick answer takes a document with it, under a name that is free",
+		quickWithFile.have === true && quickWithFile.documents?.join() === "Tableau certificate 2.pdf",
+		JSON.stringify(quickWithFile),
+	);
+	await thread.getByRole("list", { name: "Attached documents" }).last().scrollIntoViewIfNeeded();
+	await shot(window, `platform-${process.platform}-answer-attachment-sent`);
+	await pickFiles([path.join(proof, "Gone.pdf")]);
+	await attachButton.click();
+	await waitingFiles.getByText("Gone.pdf", { exact: true }).waitFor();
+	await composer.getByRole("button", { name: "Send answer" }).click();
+	await composer.getByRole("alert").filter({ hasText: "Gone.pdf could not be read" }).waitFor();
+	check(
+		"a document that cannot be read stops the answer, and the draft stays for another try",
+		(await answerBox.inputValue()) === "Half an answer to the long question" &&
+			!(await savedInbox()).find((question) => question.id === "t1").answer,
+	);
+	await app.evaluate(({ dialog }) => {
+		dialog.showOpenDialog = globalThis.realOpenDialog;
+	});
+	for (const name of ["Tableau certificate.pdf", "Tableau certificate 2.pdf"]) {
+		await fs.rm(path.join(sandbox.workspace, "documents", name));
+	}
+	await window.evaluate(() => window.desk.settings.update({ lastDocumentDirectory: undefined }));
 	inbox = [];
 	await writeInbox();
 

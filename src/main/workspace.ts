@@ -76,6 +76,38 @@ export async function addDocuments(sources: string[]): Promise<WorkspaceDocument
 	return listDocuments();
 }
 
+/**
+ * Copies the files the user attached to an answer into documents/ and returns the names they were
+ * stored under. Unlike addDocuments, a file that cannot be read fails all of it with nothing kept, so
+ * an answer never names a document that did not arrive.
+ */
+export async function importDocuments(sources: string[]): Promise<string[]> {
+	if (!sources.length) return [];
+	const { root, documents } = await ensureWorkspace();
+	const stored: string[] = [];
+	try {
+		for (const source of sources) {
+			const stats = await fs.stat(source).catch(() => null);
+			if (!stats?.isFile()) throw new Error(`${path.basename(source)} could not be read.`);
+			const name = await freeName(documents, path.basename(source));
+			await fs.copyFile(source, path.join(documents, name), fs.constants.COPYFILE_EXCL);
+			stored.push(name);
+		}
+	} catch (error) {
+		await forgetDocuments(stored);
+		throw error;
+	}
+	const outside = sources.map((source) => path.resolve(source)).find((source) => !isInside(root, source));
+	if (outside) await updateSettings({ lastDocumentDirectory: path.dirname(outside) });
+	return stored;
+}
+
+/** Takes back documents imported for an answer that was then not saved. */
+export async function forgetDocuments(names: string[]) {
+	const { documents } = await workspacePaths();
+	await Promise.all(names.map((name) => fs.rm(path.join(documents, name), { force: true })));
+}
+
 export async function removeDocument(name: string): Promise<WorkspaceDocument[]> {
 	const { documents } = await workspacePaths();
 	const target = path.join(documents, name);
