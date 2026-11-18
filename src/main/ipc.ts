@@ -9,6 +9,7 @@ import {
 	answerApplicationQuestion,
 	answerInboxQuestion,
 	applicationFolder,
+	checkReassessable,
 	listApplications,
 	listInbox,
 	patchApplication,
@@ -135,6 +136,10 @@ const handlers: Handlers = {
 			questionAnswered(application.questions.find((question) => question.id === questionId));
 			agent.answersArrived();
 			return application;
+		},
+		reassess: async (id, note) => {
+			await checkReassessable(id);
+			agent.reassess(id, note);
 		},
 		remove: removeApplication,
 		openFolder: async (id) => {

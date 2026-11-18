@@ -22,6 +22,9 @@ export const STATUS_LABELS: Record<ApplicationStatus, string> = {
 	closed: "Closed",
 };
 
+/** A card the agent can be asked to look at again: anything not yet sent, so nothing is sent twice. */
+export const reassessable = (status: ApplicationStatus) => status !== "applied" && status !== "interview";
+
 /** What a quick question can be about: the four kinds of requirement Dproz Fit Check assesses. */
 export const REQUIREMENT_KINDS = ["experience", "skills", "education", "certifications"] as const;
 

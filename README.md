@@ -38,6 +38,7 @@ The main screen is the board. Nothing has to be asked for:
 - A resume for one job is a selection from the master resume, not a copy of it. The agent picks what that employer cares about and leaves the rest out: a desk job does not hear about a commercial driving licence, and an answer you gave for one job is not put on every resume.
 - Each card lists the documents written for that job; clicking one slides a preview out beside the card, with a Download button that saves a copy.
 - **Add a job** takes jobs you found yourself: one link, several links pasted one per line, or the text of a posting. Each becomes a card, even when the fit is not obvious, since you chose it. **Apply for me** takes it through prepare, judge and send; **Prepare only** stops at Ready to submit. A job that only takes applications by email cannot be sent from here: the resume, the cover letter and the email are prepared, and the card waits under Apply manually for you to send.
+- **Reassess** on a card that has not been sent asks the agent to look at that job again: it reads the posting afresh, keeps a closed posting closed, and otherwise puts the card back through prepare, judge and send. You can say what changed ("I'd like to apply despite the travel"); that applies to this job only, not to your profile. Your sending settings and the card's hold still decide whether it is sent.
 - Pause stops the current run and holds everything until you resume.
 
 ### How resumes are written
@@ -152,6 +153,7 @@ npm run lint
 npm test                              # unit tests
 npm run build
 node tests/e2e/run.mjs platform       # setup, board, questions, drawer, master resume editor, settings, vault (no agent run)
+node tests/e2e/run.mjs reassess       # which cards offer Reassess, the note, the queued run and its history entry (no model needed)
 node tests/e2e/run.mjs gallery        # screenshots of every screen, light and dark, with demo cards
 node tests/e2e/run.mjs full           # the whole autonomous flow against a local mock jobs feed and careers portal
 node tests/e2e/run.mjs edits          # you edit your master resume, and the agent prepares again the unsent application that relied on it

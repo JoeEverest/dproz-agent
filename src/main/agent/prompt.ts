@@ -321,6 +321,21 @@ export function submitPrompt(id: string) {
 	return `The user has reviewed card "${id}" on the board and wants it sent now, whatever its hold field says. Check it has been judged (if not, start an application-judge first), then start an application-sender for applications/${id}.`;
 }
 
+export function reassessPrompt(id: string, note?: string) {
+	const said = note?.trim();
+	const change = said
+		? `They said what changed, in their own words:\n\n> ${said.split("\n").join("\n> ")}`
+		: "They did not say what changed. Their profile or answers may have, or they want a second look.";
+	return `The user has asked you to reassess card "${id}" on the board. ${change}
+
+1. Call get_answers and act on anything new. Read the card with get_application: its fit, closedReason, notes, questions and history say what was decided before and why.
+2. Check the posting is still open, from its source rather than from job.md: get_job for a Dproz job id, otherwise open jobUrl, in the browser if fetch cannot read it. Save what you read as job.md in the card's folder, replacing the old copy, and update closesAt. If applications have closed and nothing shows the deadline was extended or the job reposted, the card stays closed: set it to closed if it is not, with a closedReason that says so and the date you checked, and stop. An error, a timeout or a page that no longer loads does not show that applications have closed. If you cannot reach the posting, do not assume it is open or closed: say so in the card's notes, with the date, and carry on. The sender checks again before anything is sent.
+3. What the user said is about this job only. A fact about themselves, such as a qualification they now hold or when they can start, goes into about-me.md as usual. A wish about this job, such as applying despite the travel or accepting its salary, does not: never write it into about-me.md as a preference for other jobs. Keep it in the card's notes.
+4. Set the card to found and start an application-writer for it. Brief it with the card id, its folder, the posting, whether job.md was read again just now or could not be, and the user's words quoted in full. If they want to apply despite something the job asks for, the writer does not close the card for being a stretch: only if the posting has closed or they plainly lack something the employer will not consider them without. Then judge and send as usual. The card's hold field and the user's sending setting decide whether it is sent, as for any card.
+
+Never ask again something already asked. This run is only for this card: do not search for other jobs. Finish by saying what you decided and why.`;
+}
+
 export function addJobPrompt(source: string, prepareOnly: boolean) {
 	const links = jobLinks(source);
 	const several = links.length > 1;

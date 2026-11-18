@@ -92,6 +92,8 @@ export type AgentState = {
 	queued: number;
 	sessionId?: string;
 	active: Record<string, string>;
+	/** Cards waiting in the queue for the agent to reassess them. */
+	waiting: string[];
 	step?: string;
 	paused: boolean;
 	/** The user has the agent's browser open to sign in, so the agent is waiting for it. */
@@ -171,6 +173,8 @@ export type DeskApi = {
 		list(): Promise<Application[]>;
 		setStatus(id: string, status: ApplicationStatus): Promise<Application>;
 		answer(id: string, questionId: string, reply: QuestionReply): Promise<Application>;
+		/** Asks the agent to look at this job again, with what changed if the user said. */
+		reassess(id: string, note?: string): Promise<void>;
 		remove(id: string): Promise<void>;
 		openFolder(id: string): Promise<void>;
 		openDocument(id: string, file: string): Promise<void>;
@@ -239,6 +243,7 @@ export const DESK_METHODS = {
 		"list",
 		"setStatus",
 		"answer",
+		"reassess",
 		"remove",
 		"openFolder",
 		"openDocument",
